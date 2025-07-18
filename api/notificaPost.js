@@ -1,5 +1,6 @@
 // pages/api/notificaPost.js
 export default async function handler(req, res) {
+  console.log('[notificaPost] body ricevuto:', req.body);
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Metodo non consentito' });
   }

@@ -99,8 +99,8 @@ function renderTable(rows) {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            email: row.emailGestore,
-            nome:  row.nome_azienda,
+            email: row.email_gestore,        // ← qui
+            nome:  row.nome_azienda,         // rimane così
             piattaforma: row.piattaforma,
             cliente:     row.nome_azienda,
             titolo:      row.titolo  || '',

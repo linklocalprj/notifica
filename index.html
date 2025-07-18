@@ -89,48 +89,56 @@ function renderTable(rows) {
 
 
 
-    async function sendEmail(row) {
-      const btn = document.getElementById(`btn-${row.table}-${row.id}`);
-      btn.disabled = true;
-      btn.textContent = '…';
-      try {
-        // invoco la tua API di notifica
-        const resp = await fetch('/api/notificaPost', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            email: row.email_gestore,        // ← qui
-            nome:  row.nome_azienda,         // rimane così
-            piattaforma: row.piattaforma,
-            cliente:     row.nome_azienda,
-            titolo:      row.titolo  || '',
-            data_pubblicazione: row.data_pubblicazione || '',
-            testo:       row.testo   || '',
-            link:        row.link    || ''
-          })
-        });
-        if (!resp.ok) throw new Error((await resp.json()).error);
+async function sendEmail(row) {
+  const btn = document.getElementById(`btn-${row.table}-${row.id}`);
+  btn.disabled = true;
+  btn.textContent = '…';
 
-        // opzionale: aggiorno lo stato su Supabase
-        await fetch('/api/updateStatus', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ table: row.table, id: row.id })
-        });
+  // Preparo il payload con fallback su email_gestore o emailGestore
+  const payload = {
+    email: row.email_gestore ?? row.emailGestore ?? '',
+    nome:  row.nome_azienda,
+    piattaforma: row.piattaforma,
+    cliente:     row.nome_azienda,
+    titolo:      row.titolo  || '',
+    data_pubblicazione: row.data_pubblicazione || '',
+    testo:       row.testo   || '',
+    link:        row.link    || ''
+  };
 
-        btn.textContent = '✅';
-      } catch (err) {
-        console.error('sendEmail error:', err);
-        alert('Fallito: ' + err.message);
-        btn.disabled = false;
-        btn.textContent = 'Invia Mail';
-      }
+  console.log('Invio payload a /api/notificaPost:', payload);
+
+  try {
+    // invoco la tua API di notifica
+    const resp = await fetch('/api/notificaPost', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    if (!resp.ok) {
+      const err = await resp.json();
+      throw new Error(err.error || JSON.stringify(err));
     }
 
-    // e ONLY HERE chiamo loadAllPending
-    document.addEventListener('DOMContentLoaded', () => {
-      loadAllPending();
+    // opzionale: aggiorno lo stato su Supabase
+    const upd = await fetch('/api/updateStatus', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ table: row.table, id: row.id })
     });
+    if (!upd.ok) {
+      console.warn('updateStatus non ok:', await upd.text());
+    }
+
+    btn.textContent = '✅';
+  } catch (err) {
+    console.error('sendEmail error:', err);
+    alert('Fallito: ' + err.message);
+    btn.disabled = false;
+    btn.textContent = 'Invia Mail';
+  }
+}
+
   </script>
 </body>
 </html>

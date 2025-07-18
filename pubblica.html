@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8">
+  <title>Post in Attesa</title>
+  <style>
+    table { border-collapse: collapse; width: 100%; }
+    th, td { border: 1px solid #ccc; padding: 6px; }
+    th { background: #eee; }
+    button { padding: 4px 8px; }
+  </style>
+</head>
+<body>
+  <h1>Post in Attesa di Pubblicazione</h1>
+  <table id="posts-table">
+    <thead>
+      <tr>
+        <th>ID</th>
+        <th>Piattaforma</th>
+        <th>Cliente</th>
+        <th>Email Gestore</th>
+        <th>Contenuto</th>
+        <th>Data</th>
+        <th>Azioni</th>
+      </tr>
+    </thead>
+    <tbody></tbody>
+  </table>
+
+  <script type="module">
+    // mappa table→piattaforma
+    const tableLabels = {
+      pubblicazioni_facebook:  'Facebook',
+      pubblicazioni_instagram: 'Instagram',
+      pubblicazioni_linkedin:  'LinkedIn',
+      pubblicazioni_google:    'Google'
+    };
+
+    // definisco la funzione PRIMA
+    async function loadAllPending() {
+      try {
+        const res = await fetch('/api/loadAllPending');
+        if (!res.ok) throw new Error(await res.text());
+        const raw = await res.json();
+        const rows = raw.map(r => ({
+          ...r,
+          piattaforma: tableLabels[r.table] ?? r.table
+        }));
+        renderTable(rows);
+      } catch (e) {
+        console.error('loadAllPending error:', e);
+        alert('Errore caricamento: ' + e.message);
+      }
+    }
+
+function renderTable(rows) {
+  const tbody = document.querySelector('#posts-table tbody');
+  tbody.innerHTML = '';
+
+  rows.forEach(r => {
+    const cliente   = r.nome_azienda ?? r.azienda ?? '-';
+    const email     = r.emailGestore || '-';
+    // tronca contenuto se >100 caratteri
+    const raw       = r.titolo || r.testo || r.link || '-';
+    const contenuto = raw.length > 100
+      ? raw.slice(0, 97) + '...'
+      : raw;
+    const data = r.creato_il
+      ? new Date(r.creato_il).toLocaleString()
+      : '-';
+
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td>${r.id}</td>
+      <td>${r.piattaforma}</td>
+      <td>${cliente}</td>
+      <td>${email}</td>
+      <td>${contenuto}</td>
+      <td>${data}</td>
+      <td><button id="btn-${r.table}-${r.id}">Invia Mail</button></td>
+    `;
+    tbody.appendChild(tr);
+
+    document
+      .getElementById(`btn-${r.table}-${r.id}`)
+      .addEventListener('click', () => sendEmail(r));
+  });
+}
+
+
+
+    async function sendEmail(row) {
+      const btn = document.getElementById(`btn-${row.table}-${row.id}`);
+      btn.disabled = true;
+      btn.textContent = '…';
+      try {
+        // invoco la tua API di notifica
+        const resp = await fetch('/api/notificaPost', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            email: row.emailGestore,
+            nome:  row.nome_azienda,
+            piattaforma: row.piattaforma,
+            cliente:     row.nome_azienda,
+            titolo:      row.titolo  || '',
+            data_pubblicazione: row.data_pubblicazione || '',
+            testo:       row.testo   || '',
+            link:        row.link    || ''
+          })
+        });
+        if (!resp.ok) throw new Error((await resp.json()).error);
+
+        // opzionale: aggiorno lo stato su Supabase
+        await fetch('/api/updateStatus', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ table: row.table, id: row.id })
+        });
+
+        btn.textContent = '✅';
+      } catch (err) {
+        console.error('sendEmail error:', err);
+        alert('Fallito: ' + err.message);
+        btn.disabled = false;
+        btn.textContent = 'Invia Mail';
+      }
+    }
+
+    // e ONLY HERE chiamo loadAllPending
+    document.addEventListener('DOMContentLoaded', () => {
+      loadAllPending();
+    });
+  </script>
+</body>
+</html>

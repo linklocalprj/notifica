@@ -13,36 +13,50 @@ export default async function handler(req, res) {
     return res.status(405).json({ error: 'Solo GET consentito' });
   }
   try {
-    const allRows = await Promise.all(tables.map(async table => {
-      // chiamo il REST endpoint: filtra stato_invio e include il join su config_prenotazioni
+    // 1) Carico tutte le pubblicazioni pending
+    const allPubs = await Promise.all(tables.map(async table => {
       const url = new URL(`${SUPABASE_URL}/rest/v1/${table}`);
       url.searchParams.set('stato_invio', 'eq.pending');
-      // assume la relazione config_prenotazioni.user_id → pubblicazioni.user_id è configurata in Supabase
-      url.searchParams.set('select', '*,config_prenotazioni(contatto)');
-
       const resp = await fetch(url.toString(), {
         headers: {
           apikey:        SERVICE_ROLE_KEY,
           Authorization: `Bearer ${SERVICE_ROLE_KEY}`
         }
       });
-      if (!resp.ok) {
-        throw new Error(`Errore ${table}: ${await resp.text()}`);
-      }
+      if (!resp.ok) throw new Error(`Errore ${table}: ${await resp.text()}`);
       const data = await resp.json();
-      // estraggo contatto (prima voce, se esiste)
-      return data.map(r => ({
-        ...r,
-        table,
-        email_gestore: Array.isArray(r.config_prenotazioni) && r.config_prenotazioni[0]
-          ? r.config_prenotazioni[0].contatto
-          : null
-      }));
+      return data.map(r => ({ ...r, table }));
+    }));
+    const pubs = allPubs.flat();
+
+    // 2) Estraggo tutti i user_id unici
+    const userIds = Array.from(new Set(pubs.map(r => r.user_id).filter(Boolean)));
+    let configsMap = {};
+    if (userIds.length) {
+      // 3) Chiamo config_prenotazioni una sola volta
+      const cfgUrl = new URL(`${SUPABASE_URL}/rest/v1/config_prenotazioni`);
+      cfgUrl.searchParams.set('user_id', `in.${userIds.join(',')}`);
+      const cfgResp = await fetch(cfgUrl.toString(), {
+        headers: {
+          apikey:        SERVICE_ROLE_KEY,
+          Authorization: `Bearer ${SERVICE_ROLE_KEY}`
+        }
+      });
+      if (!cfgResp.ok) throw new Error(`Errore config_prenotazioni: ${await cfgResp.text()}`);
+      const cfgData = await cfgResp.json();
+      // mappa user_id → contatto
+      configsMap = Object.fromEntries(cfgData.map(c => [c.user_id, c.contatto]));
+    }
+
+    // 4) Unisco l'email_gestore a ogni pubblicazione
+    const rows = pubs.map(r => ({
+      ...r,
+      email_gestore: configsMap[r.user_id] || null
     }));
 
-    res.status(200).json(allRows.flat());
+    return res.status(200).json(rows);
   } catch (err) {
     console.error('[loadAllPending]', err);
-    res.status(500).json({ error: err.message });
+    return res.status(500).json({ error: err.message });
   }
 }

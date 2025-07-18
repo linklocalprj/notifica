@@ -13,11 +13,11 @@ export default async function handler(req, res) {
     return res.status(405).json({ error: 'Solo GET consentito' });
   }
   try {
-    // 1) Carico tutte le pubblicazioni pending
+    // 1) Prendo tutte le pubblicazioni pending
     const allPubs = await Promise.all(tables.map(async table => {
       const url = new URL(`${SUPABASE_URL}/rest/v1/${table}`);
       url.searchParams.set('stato_invio', 'eq.pending');
-      const resp = await fetch(url.toString(), {
+      const resp = await fetch(url, {
         headers: {
           apikey:        SERVICE_ROLE_KEY,
           Authorization: `Bearer ${SERVICE_ROLE_KEY}`
@@ -30,13 +30,18 @@ export default async function handler(req, res) {
     const pubs = allPubs.flat();
 
     // 2) Estraggo tutti i user_id unici
-    const userIds = Array.from(new Set(pubs.map(r => r.user_id).filter(Boolean)));
+    const userIds = Array.from(new Set(
+      pubs.map(r => r.user_id).filter(Boolean)
+    ));
+
+    // 3) Se ci sono user_id, prendo tutti i config_prenotazioni in un solo fetch
     let configsMap = {};
     if (userIds.length) {
-      // 3) Chiamo config_prenotazioni una sola volta
       const cfgUrl = new URL(`${SUPABASE_URL}/rest/v1/config_prenotazioni`);
-      cfgUrl.searchParams.set('user_id', `in.${userIds.join(',')}`);
-      const cfgResp = await fetch(cfgUrl.toString(), {
+      // **attenzione**: la sintassi corretta è in.(id1,id2,...)
+      cfgUrl.searchParams.set('user_id', `in.(${userIds.join(',')})`);
+
+      const cfgResp = await fetch(cfgUrl, {
         headers: {
           apikey:        SERVICE_ROLE_KEY,
           Authorization: `Bearer ${SERVICE_ROLE_KEY}`
@@ -44,8 +49,9 @@ export default async function handler(req, res) {
       });
       if (!cfgResp.ok) throw new Error(`Errore config_prenotazioni: ${await cfgResp.text()}`);
       const cfgData = await cfgResp.json();
-      // mappa user_id → contatto
-      configsMap = Object.fromEntries(cfgData.map(c => [c.user_id, c.contatto]));
+      configsMap = Object.fromEntries(
+        cfgData.map(c => [c.user_id, c.contatto])
+      );
     }
 
     // 4) Unisco l'email_gestore a ogni pubblicazione

@@ -42,7 +42,6 @@
         const res = await fetch('/api/loadAllPending');
         if (!res.ok) throw new Error(await res.text());
         const raw = await res.json();
-        console.log('❯ rawData:', raw);
         const rows = raw.map(r => ({
           ...r,
           piattaforma: tableLabels[r.table] ?? r.table

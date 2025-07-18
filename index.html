@@ -37,21 +37,30 @@
     };
 
     // definisco la funzione PRIMA
-    async function loadAllPending() {
-      try {
-        const res = await fetch('/api/loadAllPending');
-        if (!res.ok) throw new Error(await res.text());
-        const raw = await res.json();
-        const rows = raw.map(r => ({
-          ...r,
-          piattaforma: tableLabels[r.table] ?? r.table
-        }));
-        renderTable(rows);
-      } catch (e) {
-        console.error('loadAllPending error:', e);
-        alert('Errore caricamento: ' + e.message);
-      }
+async function loadAllPending() {
+  console.log('🔍 Chiamata a /api/loadAllPending…');
+  try {
+    const res = await fetch('/api/loadAllPending');
+    console.log('📬 Status:', res.status, res.statusText);
+    const raw = await res.json();
+    console.log('📦 rawData:', raw);
+    if (!Array.isArray(raw) || raw.length === 0) {
+      console.warn('⚠️ rawData è vuoto o non è un array');
     }
+    const rows = raw.map(r => ({
+      ...r,
+      piattaforma: tableLabels[r.table] ?? r.table,
+      // aliasiamo l'email
+      emailGestore: r.email_gestore ?? r.emailGestore ?? ''
+    }));
+    console.log('➡️ rows mappate:', rows);
+    renderTable(rows);
+  } catch (e) {
+    console.error('🚨 loadAllPending error:', e);
+    alert('Errore caricamento: ' + e.message);
+  }
+}
+
 
 function renderTable(rows) {
   const tbody = document.querySelector('#posts-table tbody');

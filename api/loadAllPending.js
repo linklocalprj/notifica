@@ -1,44 +1,41 @@
 // pages/api/loadAllPending.js
-import { createClient } from '@supabase/supabase-js';
-
-const supabase = createClient(
-  process.env.SUPABASE_URL,
-  process.env.SUPABASE_SERVICE_ROLE
-);
+const SUPABASE_URL  = process.env.SUPABASE_URL;
+const SERVICE_ROLE  = process.env.SUPABASE_SERVICE_ROLE;
+const tables        = [
+  'pubblicazioni_facebook',
+  'pubblicazioni_instagram',
+  'pubblicazioni_linkedin',
+  'pubblicazioni_google'
+];
 
 export default async function handler(req, res) {
   if (req.method !== 'GET') {
-    return res.status(405).json({ error: 'Metodo non consentito' });
+    return res.status(405).json({ error: 'Solo GET consentito' });
   }
-
-  const tables = [
-    'pubblicazioni_facebook',
-    'pubblicazioni_instagram',
-    'pubblicazioni_linkedin',
-    'pubblicazioni_google'
-  ];
-
   try {
-    // interroga tutte le tabelle in parallelo
-    const results = await Promise.all(
-      tables.map(table =>
-        supabase
-          .from(table)
-          .select('*')
-          .eq('stato_invio', 'pending')
-          .then(({ data, error }) => {
-            if (error) throw error;
-            // aggiungi il nome della tabella a ogni riga
-            return data.map(r => ({ ...r, table }));
-          })
-      )
-    );
+    // Per ogni tabella, chiedo i record con stato_invio = pending
+    const promises = tables.map(table => {
+      const url = new URL(`${SUPABASE_URL}/rest/v1/${table}`);
+      url.searchParams.set('stato_invio', 'eq.pending');
+      // Se vuoi limiti o ordinamenti, aggiungi params: select=*,order=...
+      return fetch(url.toString(), {
+        headers: {
+          apikey:        SERVICE_ROLE,
+          Authorization: `Bearer ${SERVICE_ROLE}`,
+          'Content-Type': 'application/json'
+        }
+      })
+      .then(async resp => {
+        if (!resp.ok) throw new Error(await resp.text());
+        const data = await resp.json();
+        return data.map(r => ({ ...r, table }));
+      });
+    });
 
-    // unisci i risultati e restituisci
-    const rows = results.flat();
+    const rows = (await Promise.all(promises)).flat();
     res.status(200).json(rows);
   } catch (err) {
-    console.error('[loadAllPending API] ', err);
+    console.error('[loadAllPending]', err);
     res.status(500).json({ error: err.message });
   }
 }

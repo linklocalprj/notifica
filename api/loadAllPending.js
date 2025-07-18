@@ -3,7 +3,7 @@ import {
   SUPABASE_URL,
   SUPABASE_KEY,
   BREVO_API_KEY,
-} from './env.js';
+} from '../env.js';
 
 // etichette di fallback
 const tableLabels = {

@@ -1,4 +1,3 @@
-// /api/loadAttivazioni.js
 import { createClient } from "@supabase/supabase-js";
 
 const supabase = createClient(
@@ -7,20 +6,23 @@ const supabase = createClient(
 );
 
 export default async function handler(req, res) {
+  if (req.method !== "GET") {
+    return res.status(405).json({ success: false, error: "Metodo non consentito" });
+  }
+
   try {
     const { data, error } = await supabase
       .from("allowed_signup_emails")
-      .select("*")
-      .order("created_at", { ascending: false });
+      .select("email, created_at, attivazione_confermata");
 
     if (error) {
-      console.error("Errore Supabase:", error);
-      return res.status(500).json({ error: "Errore Supabase: " + error.message });
+      console.error("❌ Errore Supabase:", error);
+      return res.status(500).json({ success: false, error: error.message });
     }
 
-    return res.status(200).json({ dati: data });
+    return res.status(200).json({ success: true, attivazioni: data });
   } catch (err) {
-    console.error("Errore server:", err.message);
-    return res.status(500).json({ error: "Errore interno: " + err.message });
+    console.error("❌ Errore generico:", err.message);
+    return res.status(500).json({ success: false, error: err.message });
   }
 }

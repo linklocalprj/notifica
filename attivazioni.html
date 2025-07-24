@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8">
+  <title>Attivazioni Account</title>
+  <style>
+    table { border-collapse: collapse; width: 100%; margin-top: 20px; }
+    th, td { border: 1px solid #ccc; padding: 6px; text-align: left; }
+    th { background: #eee; }
+    button { padding: 5px 10px; }
+  </style>
+</head>
+<body>
+  <h1>Account in Attesa di Attivazione</h1>
+  <table id="attivazioni-table">
+    <thead>
+      <tr>
+        <th>Email</th>
+        <th>Data Attivazione</th>
+        <th>Azioni</th>
+      </tr>
+    </thead>
+    <tbody></tbody>
+  </table>
+
+  <script type="module">
+    async function caricaAttivazioni() {
+      const res = await fetch('/api/loadAttivazioni'); // da creare
+      const lista = await res.json();
+
+      const tbody = document.querySelector("#attivazioni-table tbody");
+      tbody.innerHTML = "";
+
+      lista.forEach(row => {
+        const tr = document.createElement("tr");
+        tr.innerHTML = `
+          <td>${row.email}</td>
+          <td>${new Date(row.created_at).toLocaleString()}</td>
+          <td><button onclick="attiva('${row.email}')">✅ Conferma Attivazione</button></td>
+        `;
+        tbody.appendChild(tr);
+      });
+    }
+
+    async function attiva(email) {
+      const res = await fetch('/api/attivaAccount', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email })
+      });
+
+      if (res.ok) {
+        alert('✅ Account attivato con successo!');
+        caricaAttivazioni();
+      } else {
+        alert('❌ Errore durante attivazione.');
+      }
+    }
+
+    window.caricaAttivazioni = caricaAttivazioni;
+    document.addEventListener("DOMContentLoaded", caricaAttivazioni);
+  </script>
+</body>
+</html>

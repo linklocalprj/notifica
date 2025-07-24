@@ -58,51 +58,73 @@
 
   <script>
     async function caricaAttivazioni() {
-      const res = await fetch('/api/loadAttivazioni');
-      const data = await res.json();
+      try {
+        const res = await fetch('/api/loadAttivazioni');
 
-      if (!data.success) {
-        alert("Errore nel caricamento dati: " + data.error);
-        return;
+        if (!res.ok) {
+          const text = await res.text();
+          throw new Error(`HTTP ${res.status}: ${text}`);
+        }
+
+        const data = await res.json();
+
+        if (!data.success) {
+          throw new Error(data.error || "Errore sconosciuto");
+        }
+
+        const tbody = document.getElementById('listaAttivazioni');
+        tbody.innerHTML = '';
+
+        data.attivazioni.forEach(item => {
+          const tr = document.createElement('tr');
+
+          tr.innerHTML = `
+            <td>${item.email}</td>
+            <td>${item.created_at ? new Date(item.created_at).toLocaleDateString() : '-'}</td>
+            <td>${item.attivo ? "✅ Attivo" : "⏳ In attesa"}</td>
+            <td>
+              <button onclick="attivaEmail('${item.email}')" ${item.attivo ? "disabled" : ""}>
+                Attiva
+              </button>
+            </td>
+          `;
+
+          tbody.appendChild(tr);
+        });
+
+      } catch (err) {
+        alert("❌ Errore nel caricamento dati: " + err.message);
+        console.error("❌ Errore fetch /api/loadAttivazioni:", err);
       }
-
-      const tbody = document.getElementById('listaAttivazioni');
-      tbody.innerHTML = '';
-
-      data.attivazioni.forEach(item => {
-        const tr = document.createElement('tr');
-
-        tr.innerHTML = `
-          <td>${item.email}</td>
-          <td>${item.created_at ? new Date(item.created_at).toLocaleDateString() : '-'}</td>
-          <td>${item.attivo ? "✅ Attivo" : "⏳ In attesa"}</td>
-          <td>
-            <button onclick="attivaEmail('${item.email}')" ${item.attivo ? "disabled" : ""}>
-              Attiva
-            </button>
-          </td>
-        `;
-
-        tbody.appendChild(tr);
-      });
     }
 
     async function attivaEmail(email) {
       const conferma = confirm(`Vuoi attivare l'accesso per ${email}?`);
       if (!conferma) return;
 
-      const res = await fetch('/api/attivaAccount', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email })
-      });
+      try {
+        const res = await fetch('/api/attivaAccount', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email })
+        });
 
-      const data = await res.json();
-      if (data.success) {
-        alert("✅ Account attivato con successo");
-        caricaAttivazioni();
-      } else {
-        alert("❌ Errore durante l'attivazione: " + data.error);
+        if (!res.ok) {
+          const text = await res.text();
+          throw new Error(`HTTP ${res.status}: ${text}`);
+        }
+
+        const data = await res.json();
+        if (data.success) {
+          alert("✅ Account attivato con successo");
+          caricaAttivazioni();
+        } else {
+          throw new Error(data.error || "Errore sconosciuto");
+        }
+
+      } catch (err) {
+        alert("❌ Errore durante l'attivazione: " + err.message);
+        console.error("❌ Errore POST /api/attivaAccount:", err);
       }
     }
 

@@ -78,16 +78,17 @@
         data.attivazioni.forEach(item => {
           const tr = document.createElement('tr');
 
-          tr.innerHTML = `
-            <td>${item.email}</td>
-            <td>${item.created_at ? new Date(item.created_at).toLocaleDateString() : '-'}</td>
-            <td>${item.attivo ? "✅ Attivo" : "⏳ In attesa"}</td>
-            <td>
-              <button onclick="attivaEmail('${item.email}')" ${item.attivo ? "disabled" : ""}>
-                Attiva
-              </button>
-            </td>
-          `;
+        tr.innerHTML = `
+          <td>${item.email}</td>
+          <td>${item.created_at ? new Date(item.created_at).toLocaleDateString() : '-'}</td>
+          <td>${item.attivazione_confermata ? "✅ Attivo" : "⏳ In attesa"}</td>
+          <td>
+            <button onclick="attivaEmail('${item.email}')" ${item.attivazione_confermata ? "disabled" : ""}>
+              Attiva
+            </button>
+          </td>
+        `;
+
 
           tbody.appendChild(tr);
         });

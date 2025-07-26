@@ -19,7 +19,7 @@ export default async function handler(req, res) {
     // ✅ Aggiorna in Supabase
     const { error } = await supabase
       .from("allowed_signup_emails")
-      .update({ attivo: true })
+      .update({ attivazione_confermata: true })
       .eq("email", email);
 
     if (error) {

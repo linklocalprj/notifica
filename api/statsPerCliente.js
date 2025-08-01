@@ -11,7 +11,8 @@ export default async function handler(req, res) {
   }
 
   try {
-    const today = new Date().toISOString().split("T")[0];
+    const now = new Date();
+    const startOfDayUTC = new Date(Date.UTC(now.getFullYear(), now.getMonth(), now.getDate())).toISOString();
 
     // 1. Profili
     const { data: profili, error: errProfili } = await supabase
@@ -34,7 +35,7 @@ export default async function handler(req, res) {
     const { data: generazioni, error: errGen } = await supabase
       .from("generazioni_post")
       .select("user_id, created_at")
-      .gte("created_at", `${today}T00:00:00Z`);
+      .gte("created_at", startOfDayUTC);
     if (errGen) throw errGen;
 
     const generazioniMap = {};
@@ -46,7 +47,7 @@ export default async function handler(req, res) {
     const { data: accessi, error: errAcc } = await supabase
       .from("log_accessi")
       .select("user_id, tipo, timestamp")
-      .gte("timestamp", `${today}T00:00:00Z`);
+      .gte("timestamp", startOfDayUTC);
     if (errAcc) throw errAcc;
 
     const loginMap = {};
@@ -58,39 +59,38 @@ export default async function handler(req, res) {
     });
 
     for (const [user_id, logs] of Object.entries(accessiPerUtente)) {
-    const ordinati = logs.sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
-    let tempo = 0, loginCount = 0;
+      const ordinati = logs.sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
+      let tempo = 0, loginCount = 0;
 
-    console.log(`🧾 Accessi per utente ${user_id}:`);
-    ordinati.forEach(l => {
+      console.log(`🧾 Accessi per utente ${user_id}:`);
+      ordinati.forEach(l => {
         console.log(`   - ${l.timestamp} [${l.tipo}]`);
-    });
+      });
 
-    for (let i = 0; i < ordinati.length - 1; i++) {
+      for (let i = 0; i < ordinati.length - 1; i++) {
         const a = ordinati[i];
         const b = ordinati[i + 1];
 
         if (a.tipo === "login" && b.tipo === "logout") {
-        const diff = (new Date(b.timestamp) - new Date(a.timestamp)) / 1000;
-        tempo += diff;
-        loginCount++;
-        console.log(`   ✅ Coppia trovata: login @${a.timestamp} → logout @${b.timestamp} → ${diff} sec`);
-        i++; // salta il logout
+          const diff = (new Date(b.timestamp) - new Date(a.timestamp)) / 1000;
+          tempo += diff;
+          loginCount++;
+          console.log(`   ✅ Coppia trovata: login @${a.timestamp} → logout @${b.timestamp} → ${diff} sec`);
+          i++; // salta il logout
         } else {
-        console.warn(`   ⚠️ Coppia NON valida: ${a.tipo} → ${b.tipo}`);
+          console.warn(`   ⚠️ Coppia NON valida: ${a.tipo} → ${b.tipo}`);
         }
-    }
+      }
 
-    loginMap[user_id] = loginCount;
-    tempoMap[user_id] = tempo;
+      loginMap[user_id] = loginCount;
+      tempoMap[user_id] = tempo;
     }
-
 
     // 5. Email inviate oggi
     const { data: inviate, error: errMail } = await supabase
       .from("log_email")
       .select("user_id")
-      .gte("inviata_il", `${today}T00:00:00Z`);
+      .gte("inviata_il", startOfDayUTC);
     if (errMail) throw errMail;
 
     const emailCountMap = {};

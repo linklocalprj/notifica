@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8">
+  <title>Statistiche Clienti</title>
+  <style>
+    body {
+      font-family: sans-serif;
+      background: #f5f5f5;
+      padding: 20px;
+    }
+    h1 {
+      text-align: center;
+      margin-bottom: 20px;
+    }
+    table {
+      border-collapse: collapse;
+      width: 100%;
+      background: white;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    }
+    th, td {
+      border: 1px solid #ddd;
+      padding: 10px;
+      text-align: center;
+    }
+    th {
+      background-color: #f0f0f0;
+    }
+    input {
+      padding: 6px;
+      margin: 10px;
+      font-size: 14px;
+    }
+  </style>
+</head>
+<body>
+  <h1>📊 Statistiche Utilizzo Clienti</h1>
+
+  <div style="text-align: center;">
+    <input type="text" id="filtro-nome" placeholder="Filtra per nome cliente...">
+    <button onclick="caricaStatistiche()">🔄 Ricarica</button>
+  </div>
+
+  <table id="stats-table">
+    <thead>
+      <tr>
+        <th>Nome</th>
+        <th>Email</th>
+        <th>Generazioni Oggi</th>
+        <th>Login Oggi</th>
+        <th>Tempo Utilizzo</th>
+        <th>Email Inviate</th>
+      </tr>
+    </thead>
+    <tbody></tbody>
+  </table>
+
+  <script type="module">
+    async function caricaStatistiche() {
+      try {
+        const filtro = document.getElementById("filtro-nome").value.toLowerCase();
+        const res = await fetch("/api/statsPerCliente");
+        const dati = await res.json();
+
+        const tbody = document.querySelector("#stats-table tbody");
+        tbody.innerHTML = "";
+
+        dati.forEach(row => {
+          if (filtro && !row.nome.toLowerCase().includes(filtro)) return;
+
+          const tr = document.createElement("tr");
+          tr.innerHTML = `
+            <td>${row.nome}</td>
+            <td>${row.email}</td>
+            <td>${row.generazioni_oggi}</td>
+            <td>${row.login_oggi}</td>
+            <td>${row.tempo_utilizzo}</td>
+            <td>${row.email_inviate}</td>
+          `;
+          tbody.appendChild(tr);
+        });
+
+      } catch (err) {
+        console.error("Errore caricamento statistiche:", err);
+        alert("Errore caricamento dati.");
+      }
+    }
+
+    document.addEventListener("DOMContentLoaded", caricaStatistiche);
+  </script>
+</body>
+</html>

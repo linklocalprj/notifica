@@ -38,7 +38,10 @@ async function restoreSession() {
 
 async function login() {
   const { error } = await supabase.auth.signInWithOAuth({
-    provider: "google"
+    provider: "google",
+    options: {
+      redirectTo: window.location.origin + window.location.pathname
+    }
   });
   if (error) alert("Errore login: " + error.message);
 }

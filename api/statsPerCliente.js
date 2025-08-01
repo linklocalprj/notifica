@@ -58,23 +58,33 @@ export default async function handler(req, res) {
     });
 
     for (const [user_id, logs] of Object.entries(accessiPerUtente)) {
-      const ordinati = logs.sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
-      let tempo = 0, loginCount = 0;
+    const ordinati = logs.sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
+    let tempo = 0, loginCount = 0;
 
-      for (let i = 0; i < ordinati.length - 1; i++) {
+    console.log(`🧾 Accessi per utente ${user_id}:`);
+    ordinati.forEach(l => {
+        console.log(`   - ${l.timestamp} [${l.tipo}]`);
+    });
+
+    for (let i = 0; i < ordinati.length - 1; i++) {
         const a = ordinati[i];
         const b = ordinati[i + 1];
-        if (a.tipo === "login" && b.tipo === "logout") {
-          const diff = (new Date(b.timestamp) - new Date(a.timestamp)) / 1000;
-          tempo += diff;
-          loginCount++;
-          i++;
-        }
-      }
 
-      loginMap[user_id] = loginCount;
-      tempoMap[user_id] = tempo;
+        if (a.tipo === "login" && b.tipo === "logout") {
+        const diff = (new Date(b.timestamp) - new Date(a.timestamp)) / 1000;
+        tempo += diff;
+        loginCount++;
+        console.log(`   ✅ Coppia trovata: login @${a.timestamp} → logout @${b.timestamp} → ${diff} sec`);
+        i++; // salta il logout
+        } else {
+        console.warn(`   ⚠️ Coppia NON valida: ${a.tipo} → ${b.tipo}`);
+        }
     }
+
+    loginMap[user_id] = loginCount;
+    tempoMap[user_id] = tempo;
+    }
+
 
     // 5. Email inviate oggi
     const { data: inviate, error: errMail } = await supabase

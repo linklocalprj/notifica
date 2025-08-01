@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8">
+  <title>Statistiche Pubblicazioni</title>
+  <style>
+    body { font-family: sans-serif; background: #f9f9f9; padding: 20px; }
+    h1 { text-align: center; margin-bottom: 30px; }
+    table { border-collapse: collapse; width: 100%; background: white; box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
+    th, td { border: 1px solid #ddd; padding: 10px; text-align: center; font-size: 14px; }
+    th { background: #efefef; }
+    input { padding: 6px; margin-bottom: 12px; width: 300px; font-size: 14px; }
+    .loading { text-align: center; color: gray; margin-top: 20px; }
+  </style>
+</head>
+<body>
+  <h1>📢 Statistiche Pubblicazioni e Engagement</h1>
+  <div style="text-align: center;">
+    <input type="text" id="filtro" placeholder="🔍 Filtra per nome o email...">
+  </div>
+
+  <div id="contenuto"></div>
+  <div class="loading" id="loading">⏳ Caricamento in corso...</div>
+
+  <script type="module">
+    async function caricaDati() {
+      const filtro = document.getElementById('filtro').value.toLowerCase();
+      const contenitore = document.getElementById('contenuto');
+      const loading = document.getElementById('loading');
+      loading.style.display = 'block';
+      contenitore.innerHTML = '';
+
+      try {
+        const res = await fetch('/api/statsPubblicazioni');
+        const stats = await res.json();
+        loading.style.display = 'none';
+
+        if (!Array.isArray(stats)) throw new Error("Formato dati errato");
+
+        const table = document.createElement('table');
+        table.innerHTML = `
+          <thead>
+            <tr>
+              <th>Cliente</th>
+              <th>Email</th>
+              <th>Post Creati</th>
+              <th>Post Inviati</th>
+              <th>Prenotazioni 7gg</th>
+              <th>Giorni Più Attivi</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        `;
+
+        const tbody = table.querySelector('tbody');
+
+        stats.forEach(row => {
+          const nome = row.nome.toLowerCase();
+          const email = (row.email || '').toLowerCase();
+          if (filtro && !nome.includes(filtro) && !email.includes(filtro)) return;
+
+          const tr = document.createElement('tr');
+          tr.innerHTML = `
+            <td>${row.nome}</td>
+            <td>${row.email}</td>
+            <td>${row.post_totali}</td>
+            <td>${row.post_inviati}</td>
+            <td>${row.prenotazioni_7gg}</td>
+            <td>${row.giorni_piu_attivi}</td>
+          `;
+          tbody.appendChild(tr);
+        });
+
+        contenitore.appendChild(table);
+      } catch (err) {
+        loading.innerText = '❌ Errore nel caricamento: ' + err.message;
+        console.error(err);
+      }
+    }
+
+    document.getElementById('filtro').addEventListener('input', caricaDati);
+    document.addEventListener('DOMContentLoaded', caricaDati);
+  </script>
+</body>
+</html>

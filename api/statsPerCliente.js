@@ -47,7 +47,7 @@ export default async function handler(req, res) {
     const { data: accessi, error: errAcc } = await supabase
       .from("log_accessi")
       .select("user_id, tipo, timestamp")
-      .gte("timestamp", startOfDayUTC);
+      .gte("timestamp", `${new Date().toISOString().split("T")[0]}T00:00:00+02:00`);
     if (errAcc) throw errAcc;
 
     const loginMap = {};

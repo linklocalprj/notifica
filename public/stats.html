@@ -32,6 +32,14 @@
       margin: 10px;
       font-size: 14px;
     }
+    th.sortable {
+        cursor: pointer;
+        color: #2e3b55;
+    }
+    th.sortable:hover {
+        text-decoration: underline;
+    }
+
   </style>
 </head>
 <body>
@@ -44,72 +52,105 @@
 
   <table id="stats-table">
     <thead>
-      <tr>
+    <tr>
         <th>Nome</th>
         <th>Email</th>
-        <th>Generazioni Oggi</th>
-        <th>Login Oggi</th>
-        <th>Accessi Totali</th>
-        <th>Tempo Utilizzo</th>
-        <th>Email Inviate</th>
-      </tr>
+        <th class="sortable" data-campo="generazioni_oggi">Generazioni</th>
+        <th class="sortable" data-campo="login_oggi">Login</th>
+        <th class="sortable" data-campo="tempo_secondi">Utilizzo</th>
+        <th class="sortable" data-campo="email_inviate">Email</th>
+        <th class="sortable" data-campo="accessi_totali">Accessi totali</th>
+    </tr>
     </thead>
+
     <tbody></tbody>
   </table>
 
 <script type="module">
+  let datiOriginali = [];
+  let sortColonna = null;
+  let sortAsc = true;
+
   async function caricaStatistiche() {
     try {
       const filtro = document.getElementById("filtro-nome").value.toLowerCase();
       const res = await fetch("/api/statsPerCliente");
 
-      if (!res.ok) {
-        const text = await res.text();
-        console.error("❌ Errore nella risposta HTTP:", res.status, text);
-        throw new Error("Errore HTTP: " + res.status);
-      }
+      if (!res.ok) throw new Error("Errore HTTP");
 
       const dati = await res.json();
-      console.log("🪵 Dati ricevuti:", dati);
-      if (!Array.isArray(dati)) {
-        console.error("❗ Formato dati non valido:", typeof dati);
-        throw new Error("Formato dati non valido");
-      }
+      datiOriginali = dati.map(d => ({
+        ...d,
+        tempo_secondi: parseTempo(d.tempo_utilizzo)
+      }));
 
-      const tbody = document.querySelector("#stats-table tbody");
-      tbody.innerHTML = "";
-
-      let righeVisibili = 0;
-
-      dati.forEach(row => {
-        console.log(`👤 ${row.nome} (${row.email}) → login_oggi: ${row.login_oggi}, tempo: ${row.tempo_utilizzo}`);
-
-        if (filtro && !row.nome.toLowerCase().includes(filtro)) return;
-
-        const tr = document.createElement("tr");
-        tr.innerHTML = `
-          <td>${row.nome}</td>
-          <td>${row.email}</td>
-          <td>${row.generazioni_oggi}</td>
-          <td>${row.login_oggi}</td>
-          <td>${row.accessi_totali}</td>
-          <td>${row.tempo_utilizzo}</td>
-          <td>${row.email_inviate}</td>
-        `;
-        tbody.appendChild(tr);
-        righeVisibili++;
-      });
-
-      console.log(`📊 Righe totali: ${dati.length}, mostrate: ${righeVisibili}`);
-
+      renderTabella(filtro);
     } catch (err) {
       console.error("❌ Errore caricamento statistiche:", err);
-      alert("Errore caricamento dati: " + err.message);
+      alert("Errore caricamento dati.");
     }
   }
 
+  function parseTempo(str) {
+    if (!str || str === "-") return 0;
+    const match = str.match(/(\d+)h\s+(\d+)m/);
+    if (match) {
+      return parseInt(match[1]) * 3600 + parseInt(match[2]) * 60;
+    }
+    return 0;
+  }
+
+  function renderTabella(filtro = "") {
+    const tbody = document.querySelector("#stats-table tbody");
+    tbody.innerHTML = "";
+
+    let datiFiltrati = datiOriginali.filter(r =>
+      !filtro || r.nome.toLowerCase().includes(filtro)
+    );
+
+    if (sortColonna) {
+      datiFiltrati.sort((a, b) => {
+        const valA = a[sortColonna] || 0;
+        const valB = b[sortColonna] || 0;
+        return sortAsc ? valA - valB : valB - valA;
+      });
+    }
+
+    datiFiltrati.forEach(row => {
+      const tr = document.createElement("tr");
+      tr.innerHTML = `
+        <td>${row.nome}</td>
+        <td>${row.email}</td>
+        <td>${row.generazioni_oggi}</td>
+        <td>${row.login_oggi}</td>
+        <td>${row.tempo_utilizzo}</td>
+        <td>${row.email_inviate}</td>
+        <td>${row.accessi_totali}</td>
+      `;
+      tbody.appendChild(tr);
+    });
+  }
+
+  // 🔄 Cambio filtro testo
+  document.getElementById("filtro-nome").addEventListener("input", () => renderTabella(document.getElementById("filtro-nome").value));
+
+  // 🔼🔽 Click intestazioni
+  document.querySelectorAll("#stats-table thead th.sortable").forEach(th => {
+    th.addEventListener("click", () => {
+      const campo = th.dataset.campo;
+      if (sortColonna === campo) {
+        sortAsc = !sortAsc;
+      } else {
+        sortColonna = campo;
+        sortAsc = false;
+      }
+      renderTabella(document.getElementById("filtro-nome").value);
+    });
+  });
+
   document.addEventListener("DOMContentLoaded", caricaStatistiche);
 </script>
+
 
 
 </body>

@@ -4,9 +4,6 @@
   <meta charset="UTF-8">
   <title>Postami – Admin</title>
   <script type="module" src="/supabase-auth-admin.js"></script>
-  <link rel="manifest" href="/manifest.json">
-<meta name="theme-color" content="#2e3b55">
-
   <style>
     body {
       font-family: sans-serif;
@@ -79,5 +76,16 @@
     <p style="margin-bottom: 1rem; font-size: 1.1rem; color:#444">Effettua il login per accedere all'area amministrativa</p>
     <button id="login-btn" class="logout-btn">Login con Google</button>
   </div>
+
+  <script>
+            if ('serviceWorker' in navigator) {
+        window.addEventListener('load', () => {
+            navigator.serviceWorker.register('/sw.js')
+            .then(() => console.log('✅ Service Worker registrato'))
+            .catch(err => console.error('❌ Service Worker error:', err));
+        });
+        }
+
+  </script>
 </body>
 </html>

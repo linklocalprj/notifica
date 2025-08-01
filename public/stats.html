@@ -65,6 +65,8 @@
 
         const tbody = document.querySelector("#stats-table tbody");
         tbody.innerHTML = "";
+        console.log("🪵 Dati ricevuti:", dati); // 👈 AGGIUNTA
+
 
         dati.forEach(row => {
           if (filtro && !row.nome.toLowerCase().includes(filtro)) return;

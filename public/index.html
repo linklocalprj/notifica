@@ -3,10 +3,9 @@
 <head>
   <meta charset="UTF-8">
   <title>Postami – Admin</title>
-  <script type="module" src="/supabase-auth-admin.js"></script>
   <link rel="manifest" href="/manifest.json">
-<meta name="theme-color" content="#2e3b55">
-
+  <meta name="theme-color" content="#2e3b55">
+  <script type="module" src="/supabase-auth-admin.js"></script>
   <style>
     body {
       font-family: sans-serif;
@@ -60,16 +59,16 @@
   <div id="admin-section" style="display:none;">
     <div class="menu-container">
       <div class="menu-item">
-        <a href="/attivazioni.html" target="_blank">🔑 Gestione Attivazioni</a>
+        <a href="/attivazioni.html">🔑 Gestione Attivazioni</a>
       </div>
       <div class="menu-item">
-        <a href="/stats.html" target="_blank">📊 Statistiche Base Utenti</a>
+        <a href="/stats.html">📊 Statistiche Base Utenti</a>
       </div>
       <div class="menu-item">
-        <a href="/stats-avanzate.html" target="_blank">📈 Statistiche Avanzate 7gg</a>
+        <a href="/stats-avanzate.html">📈 Statistiche Avanzate 7gg</a>
       </div>
       <div class="menu-item">
-        <a href="/stats-pubblicazioni.html" target="_blank">📢 Statistiche Pubblicazioni</a>
+        <a href="/stats-pubblicazioni.html">📢 Statistiche Pubblicazioni</a>
       </div>
     </div>
     <button class="logout-btn" onclick="logout()">Logout</button>
@@ -81,14 +80,13 @@
   </div>
 
   <script>
-            if ('serviceWorker' in navigator) {
-        window.addEventListener('load', () => {
-            navigator.serviceWorker.register('/sw.js')
-            .then(() => console.log('✅ Service Worker registrato'))
-            .catch(err => console.error('❌ Service Worker error:', err));
-        });
-        }
-
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('/sw.js')
+          .then(() => console.log('✅ Service Worker registrato'))
+          .catch(err => console.error('❌ Service Worker error:', err));
+      });
+    }
   </script>
 </body>
 </html>

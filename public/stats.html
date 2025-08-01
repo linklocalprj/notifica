@@ -35,21 +35,6 @@
   </style>
 </head>
 <body>
-  <div style="margin: 2rem 0; text-align: center;">
-  <a href="/index.html" style="
-    display: inline-block;
-    padding: 10px 20px;
-    background-color: #2e3b55;
-    color: white;
-    border-radius: 8px;
-    text-decoration: none;
-    font-weight: bold;
-    font-size: 1rem;
-  ">
-    🏠 Torna alla Home
-  </a>
-</div>
-
   <h1>📊 Statistiche Utilizzo Clienti</h1>
 
   <div style="text-align: center;">
@@ -71,40 +56,56 @@
     <tbody></tbody>
   </table>
 
-  <script type="module">
-    async function caricaStatistiche() {
-      try {
-        const filtro = document.getElementById("filtro-nome").value.toLowerCase();
-        const res = await fetch("/api/statsPerCliente");
-        const dati = await res.json();
+<script type="module">
+  async function caricaStatistiche() {
+    try {
+      const filtro = document.getElementById("filtro-nome").value.toLowerCase();
+      const res = await fetch("/api/statsPerCliente");
 
-        const tbody = document.querySelector("#stats-table tbody");
-        tbody.innerHTML = "";
-        console.log("🪵 Dati ricevuti:", dati); // 👈 AGGIUNTA
-
-
-        dati.forEach(row => {
-          if (filtro && !row.nome.toLowerCase().includes(filtro)) return;
-
-          const tr = document.createElement("tr");
-          tr.innerHTML = `
-            <td>${row.nome}</td>
-            <td>${row.email}</td>
-            <td>${row.generazioni_oggi}</td>
-            <td>${row.login_oggi}</td>
-            <td>${row.tempo_utilizzo}</td>
-            <td>${row.email_inviate}</td>
-          `;
-          tbody.appendChild(tr);
-        });
-
-      } catch (err) {
-        console.error("Errore caricamento statistiche:", err);
-        alert("Errore caricamento dati.");
+      if (!res.ok) {
+        const text = await res.text();
+        console.error("❌ Errore nella risposta HTTP:", res.status, text);
+        throw new Error("Errore HTTP: " + res.status);
       }
-    }
 
-    document.addEventListener("DOMContentLoaded", caricaStatistiche);
-  </script>
+      const dati = await res.json();
+      console.log("🪵 Dati ricevuti:", dati);
+      if (!Array.isArray(dati)) {
+        console.error("❗ Formato dati non valido:", typeof dati);
+        throw new Error("Formato dati non valido");
+      }
+
+      const tbody = document.querySelector("#stats-table tbody");
+      tbody.innerHTML = "";
+
+      let righeVisibili = 0;
+
+      dati.forEach(row => {
+        if (filtro && !row.nome.toLowerCase().includes(filtro)) return;
+
+        const tr = document.createElement("tr");
+        tr.innerHTML = `
+          <td>${row.nome}</td>
+          <td>${row.email}</td>
+          <td>${row.generazioni_oggi}</td>
+          <td>${row.login_oggi}</td>
+          <td>${row.tempo_utilizzo}</td>
+          <td>${row.email_inviate}</td>
+        `;
+        tbody.appendChild(tr);
+        righeVisibili++;
+      });
+
+      console.log(`📊 Righe totali: ${dati.length}, mostrate: ${righeVisibili}`);
+
+    } catch (err) {
+      console.error("❌ Errore caricamento statistiche:", err);
+      alert("Errore caricamento dati: " + err.message);
+    }
+  }
+
+  document.addEventListener("DOMContentLoaded", caricaStatistiche);
+</script>
+
 </body>
 </html>

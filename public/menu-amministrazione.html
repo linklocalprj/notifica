@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8">
+  <title>Postami – Admin</title>
+  <script type="module" src="/supabase-auth-admin.js"></script>
+  <style>
+    body {
+      font-family: sans-serif;
+      background: #f5f7fa;
+      padding: 40px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+    h1 {
+      margin-bottom: 2rem;
+      color: #2e3b55;
+    }
+    .menu-container {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 1.5rem;
+      width: 100%;
+      max-width: 800px;
+    }
+    .menu-item a {
+      display: block;
+      padding: 16px 20px;
+      background-color: #2e3b55;
+      color: white;
+      border-radius: 10px;
+      text-decoration: none;
+      font-size: 1.1rem;
+      text-align: center;
+      transition: background-color 0.2s ease;
+    }
+    .menu-item a:hover {
+      background-color: #3a4a6d;
+    }
+    .logout-btn {
+      margin-top: 2rem;
+      background: #999;
+      color: white;
+      padding: 8px 16px;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+    }
+    .logout-btn:hover {
+      background-color: #777;
+    }
+  </style>
+</head>
+<body>
+  <h1>🔧 Area Amministrativa Postami</h1>
+  <div id="admin-section" style="display:none;">
+    <div class="menu-container">
+      <div class="menu-item">
+        <a href="/attivazioni.html" target="_blank">🔑 Gestione Attivazioni</a>
+      </div>
+      <div class="menu-item">
+        <a href="/stats.html" target="_blank">📊 Statistiche Base Utenti</a>
+      </div>
+      <div class="menu-item">
+        <a href="/stats-avanzate.html" target="_blank">📈 Statistiche Avanzate 7gg</a>
+      </div>
+      <div class="menu-item">
+        <a href="/stats-pubblicazioni.html" target="_blank">📢 Statistiche Pubblicazioni</a>
+      </div>
+    </div>
+    <button class="logout-btn" onclick="logout()">Logout</button>
+  </div>
+
+  <div id="login-section" style="display:flex; flex-direction:column; align-items:center;">
+    <p style="margin-bottom: 1rem; font-size: 1.1rem; color:#444">Effettua il login per accedere all'area amministrativa</p>
+    <button id="login-btn" class="logout-btn">Login con Google</button>
+  </div>
+</body>
+</html>

@@ -14,6 +14,7 @@ export default async function handler(req, res) {
     const now = new Date();
     const startOfDayUTC = new Date(Date.UTC(now.getFullYear(), now.getMonth(), now.getDate())).toISOString();
 
+
     // 1. Profili
     const { data: profili, error: errProfili } = await supabase
       .from("profilo_azienda")
@@ -47,7 +48,7 @@ export default async function handler(req, res) {
     const { data: accessi, error: errAcc } = await supabase
       .from("log_accessi")
       .select("user_id, tipo, timestamp")
-      .gte("timestamp", `${new Date().toISOString().split("T")[0]}T00:00:00+02:00`);
+      .gte("timestamp", startOfDayUTC);
     if (errAcc) throw errAcc;
 
     const loginMap = {};

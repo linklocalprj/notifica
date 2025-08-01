@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8">
+  <title>Statistiche Avanzate</title>
+  <style>
+    body { font-family: sans-serif; background: #f7f7f7; padding: 20px; }
+    h1 { text-align: center; margin-bottom: 30px; }
+    table { border-collapse: collapse; width: 100%; background: white; box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
+    th, td { border: 1px solid #ddd; padding: 8px; text-align: center; font-size: 14px; }
+    th { background: #eaeaea; }
+    input { padding: 6px; margin-bottom: 12px; width: 300px; font-size: 14px; }
+    .loading { color: gray; text-align: center; margin-top: 20px; }
+  </style>
+</head>
+<body>
+  <h1>📊 Statistiche Avanzate Clienti</h1>
+  <div style="text-align: center;">
+    <input type="text" id="filtro" placeholder="🔍 Filtra per nome o email...">
+  </div>
+
+  <div id="output"></div>
+  <div class="loading" id="loading">⏳ Caricamento dati in corso...</div>
+
+  <script type="module">
+    async function caricaStatistiche() {
+      const filtro = document.getElementById('filtro').value.toLowerCase();
+      const container = document.getElementById('output');
+      const loading = document.getElementById('loading');
+      loading.style.display = 'block';
+      container.innerHTML = '';
+
+      try {
+        const res = await fetch('/api/statsEstesePerCliente');
+        const stats = await res.json();
+        loading.style.display = 'none';
+
+        if (!Array.isArray(stats)) throw new Error("Dati non validi");
+
+        const table = document.createElement('table');
+        table.innerHTML = `
+          <thead>
+            <tr>
+              <th>Cliente</th>
+              <th>Email</th>
+              <th>Generazioni 7gg</th>
+              <th>Media/giorno</th>
+              <th>Email 7gg</th>
+              <th>Fallite</th>
+              <th>Ultimo Accesso</th>
+              <th>Tempo Totale</th>
+              <th>Giorni Attivi</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        `;
+
+        const tbody = table.querySelector('tbody');
+
+        stats.forEach(row => {
+          const nome = row.nome.toLowerCase();
+          const email = (row.email || '').toLowerCase();
+          if (filtro && !nome.includes(filtro) && !email.includes(filtro)) return;
+
+          const tr = document.createElement('tr');
+          tr.innerHTML = `
+            <td>${row.nome}</td>
+            <td>${row.email}</td>
+            <td>${row.generazioni_7gg}</td>
+            <td>${row.media_giornaliera}</td>
+            <td>${row.email_7gg}</td>
+            <td>${row.email_fallite}</td>
+            <td>${row.ultimo_accesso}</td>
+            <td>${row.tempo_totale}</td>
+            <td>${row.giorni_attivi}</td>
+          `;
+          tbody.appendChild(tr);
+        });
+
+        container.appendChild(table);
+      } catch (err) {
+        loading.innerText = '❌ Errore durante il caricamento: ' + err.message;
+        console.error(err);
+      }
+    }
+
+    document.getElementById('filtro').addEventListener('input', caricaStatistiche);
+    document.addEventListener('DOMContentLoaded', caricaStatistiche);
+  </script>
+</body>
+</html>

@@ -13,40 +13,46 @@ export default async function handler(req, res) {
   try {
     const today = new Date().toISOString().split("T")[0];
 
-    // 1. Profili utente
+    // 1. Profili
     const { data: profili, error: errProfili } = await supabase
       .from("profilo_azienda")
-      .select("user_id, nome, email");
-
+      .select("user_id, nome");
     if (errProfili) throw errProfili;
 
-    // 2. Generazioni oggi
+    // 2. Email dai config_prenotazioni
+    const { data: contatti, error: errContatti } = await supabase
+      .from("config_prenotazioni")
+      .select("user_id, contatto");
+    if (errContatti) throw errContatti;
+
+    const emailMap = {};
+    (contatti || []).forEach(c => {
+      emailMap[c.user_id] = c.contatto;
+    });
+
+    // 3. Generazioni post
     const { data: generazioni, error: errGen } = await supabase
       .from("generazioni_post")
       .select("user_id, created_at")
       .gte("created_at", `${today}T00:00:00Z`);
-
     if (errGen) throw errGen;
 
     const generazioniMap = {};
-    generazioni.forEach(g => {
+    (generazioni || []).forEach(g => {
       generazioniMap[g.user_id] = (generazioniMap[g.user_id] || 0) + 1;
     });
 
-    // 3. Login/logout oggi
+    // 4. Accessi
     const { data: accessi, error: errAcc } = await supabase
       .from("log_accessi")
       .select("user_id, tipo, timestamp")
       .gte("timestamp", `${today}T00:00:00Z`);
-
     if (errAcc) throw errAcc;
 
     const loginMap = {};
     const tempoMap = {};
-
-    // Organizzo login/logout
     const accessiPerUtente = {};
-    accessi.forEach(entry => {
+    (accessi || []).forEach(entry => {
       const list = accessiPerUtente[entry.user_id] ||= [];
       list.push(entry);
     });
@@ -59,10 +65,10 @@ export default async function handler(req, res) {
         const a = ordinati[i];
         const b = ordinati[i + 1];
         if (a.tipo === "login" && b.tipo === "logout") {
-          const diff = (new Date(b.timestamp) - new Date(a.timestamp)) / 1000; // sec
+          const diff = (new Date(b.timestamp) - new Date(a.timestamp)) / 1000;
           tempo += diff;
           loginCount++;
-          i++; // skip next
+          i++;
         }
       }
 
@@ -70,20 +76,19 @@ export default async function handler(req, res) {
       tempoMap[user_id] = tempo;
     }
 
-    // 4. Email inviate oggi
+    // 5. Email inviate oggi
     const { data: inviate, error: errMail } = await supabase
       .from("log_email")
       .select("user_id")
       .gte("inviata_il", `${today}T00:00:00Z`);
-
     if (errMail) throw errMail;
 
-    const emailMap = {};
-    inviate.forEach(e => {
-      emailMap[e.user_id] = (emailMap[e.user_id] || 0) + 1;
+    const emailCountMap = {};
+    (inviate || []).forEach(e => {
+      emailCountMap[e.user_id] = (emailCountMap[e.user_id] || 0) + 1;
     });
 
-    // 5. Costruisco risultati
+    // 6. Costruzione finale
     const risultati = profili.map(p => {
       const sec = tempoMap[p.user_id] || 0;
       const ore = Math.floor(sec / 3600);
@@ -93,17 +98,17 @@ export default async function handler(req, res) {
       return {
         user_id: p.user_id,
         nome: p.nome,
-        email: p.email,
+        email: emailMap[p.user_id] || "-",
         generazioni_oggi: generazioniMap[p.user_id] || 0,
         login_oggi: loginMap[p.user_id] || 0,
         tempo_utilizzo: tempoStr,
-        email_inviate: emailMap[p.user_id] || 0
+        email_inviate: emailCountMap[p.user_id] || 0
       };
     });
 
     return res.status(200).json(risultati);
   } catch (err) {
-    console.error("[statsPerCliente]", err);
+    console.error("[statsPerCliente] ERRORE:", err);
     return res.status(500).json({ error: err.message });
   }
 }

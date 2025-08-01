@@ -47,7 +47,7 @@ export default async function handler(req, res) {
     const { data: accessi, error: errAcc } = await supabase
       .from("log_accessi")
       .select("user_id, tipo, timestamp")
-      .gte("timestamp", `${new Date().toISOString().split("T")[0]}T00:00:00`);
+      .gte("timestamp", `${new Date().toISOString().split("T")[0]}T00:00:00+02:00`);
     if (errAcc) throw errAcc;
 
     const loginMap = {};
@@ -86,6 +86,22 @@ export default async function handler(req, res) {
       tempoMap[user_id] = tempo;
     }
 
+    // 4b. Accessi totali (non filtrati per data)
+        const { data: accessiTotali, error: errTot } = await supabase
+        .from("log_accessi")
+        .select("user_id");
+
+        if (errTot) throw errTot;
+
+        const accessiTotaliMap = {};
+        (accessiTotali || []).forEach(r => {
+        accessiTotaliMap[r.user_id] = (accessiTotaliMap[r.user_id] || 0) + 1;
+        });
+
+
+
+
+
     // 5. Email inviate oggi
     const { data: inviate, error: errMail } = await supabase
       .from("log_email")
@@ -111,6 +127,7 @@ export default async function handler(req, res) {
         email: emailMap[p.user_id] || "-",
         generazioni_oggi: generazioniMap[p.user_id] || 0,
         login_oggi: loginMap[p.user_id] || 0,
+        accessi_totali: accessiTotaliMap[p.user_id] || 0,
         tempo_utilizzo: tempoStr,
         email_inviate: emailCountMap[p.user_id] || 0
       };

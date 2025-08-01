@@ -8,13 +8,15 @@
     h1 { text-align: center; margin-bottom: 30px; }
     table { border-collapse: collapse; width: 100%; background: white; box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
     th, td { border: 1px solid #ddd; padding: 10px; text-align: center; font-size: 14px; }
-    th { background: #efefef; }
+    th { background: #efefef; cursor: pointer; }
     input { padding: 6px; margin-bottom: 12px; width: 300px; font-size: 14px; }
     .loading { text-align: center; color: gray; margin-top: 20px; }
+    .sorted-asc::after { content: " 🔼"; }
+    .sorted-desc::after { content: " 🔽"; }
   </style>
 </head>
 <body>
-  <div style="margin: 2rem 0; text-align: center;">
+      <div style="margin: 2rem 0; text-align: center;">
   <a href="/index.html" style="
     display: inline-block;
     padding: 10px 20px;
@@ -28,7 +30,6 @@
     🏠 Torna alla Home
   </a>
 </div>
-
   <h1>📢 Statistiche Pubblicazioni e Engagement</h1>
   <div style="text-align: center;">
     <input type="text" id="filtro" placeholder="🔍 Filtra per nome o email...">
@@ -38,6 +39,10 @@
   <div class="loading" id="loading">⏳ Caricamento in corso...</div>
 
   <script type="module">
+    let datiOriginali = [];
+    let campoOrdinamento = null;
+    let asc = true;
+
     async function caricaDati() {
       const filtro = document.getElementById('filtro').value.toLowerCase();
       const contenitore = document.getElementById('contenuto');
@@ -51,49 +56,94 @@
         loading.style.display = 'none';
 
         if (!Array.isArray(stats)) throw new Error("Formato dati errato");
+        datiOriginali = stats;
 
-        const table = document.createElement('table');
-        table.innerHTML = `
-          <thead>
-            <tr>
-              <th>Cliente</th>
-              <th>Email</th>
-              <th>Post Creati</th>
-              <th>Post Inviati</th>
-              <th>Prenotazioni 7gg</th>
-              <th>Giorni Più Attivi</th>
-            </tr>
-          </thead>
-          <tbody></tbody>
-        `;
-
-        const tbody = table.querySelector('tbody');
-
-        stats.forEach(row => {
-          const nome = row.nome.toLowerCase();
-          const email = (row.email || '').toLowerCase();
-          if (filtro && !nome.includes(filtro) && !email.includes(filtro)) return;
-
-          const tr = document.createElement('tr');
-          tr.innerHTML = `
-            <td>${row.nome}</td>
-            <td>${row.email}</td>
-            <td>${row.post_totali}</td>
-            <td>${row.post_inviati}</td>
-            <td>${row.prenotazioni_7gg}</td>
-            <td>${row.giorni_piu_attivi}</td>
-          `;
-          tbody.appendChild(tr);
-        });
-
-        contenitore.appendChild(table);
+        renderTabella(filtro);
       } catch (err) {
         loading.innerText = '❌ Errore nel caricamento: ' + err.message;
         console.error(err);
       }
     }
 
-    document.getElementById('filtro').addEventListener('input', caricaDati);
+    function renderTabella(filtro = "") {
+      const contenitore = document.getElementById('contenuto');
+      contenitore.innerHTML = "";
+
+      let dati = [...datiOriginali];
+
+      if (filtro) {
+        dati = dati.filter(row =>
+          row.nome.toLowerCase().includes(filtro) ||
+          (row.email || '').toLowerCase().includes(filtro)
+        );
+      }
+
+      if (campoOrdinamento) {
+        dati.sort((a, b) => {
+          const valA = a[campoOrdinamento] ?? 0;
+          const valB = b[campoOrdinamento] ?? 0;
+          return asc ? valA - valB : valB - valA;
+        });
+      }
+
+      const table = document.createElement('table');
+      table.innerHTML = `
+        <thead>
+          <tr>
+            <th>Cliente</th>
+            <th>Email</th>
+            <th data-sort="post_totali">Post Creati</th>
+            <th data-sort="post_inviati">Post Inviati</th>
+            <th data-sort="prenotazioni_7gg">Prenotazioni 7gg</th>
+            <th>Giorni Più Attivi</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      `;
+
+      const tbody = table.querySelector('tbody');
+      dati.forEach(row => {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td>${row.nome}</td>
+          <td>${row.email}</td>
+          <td>${row.post_totali}</td>
+          <td>${row.post_inviati}</td>
+          <td>${row.prenotazioni_7gg}</td>
+          <td>${row.giorni_piu_attivi}</td>
+        `;
+        tbody.appendChild(tr);
+      });
+
+      // gestisci freccette ordinamento
+      table.querySelectorAll('th[data-sort]').forEach(th => {
+        th.classList.remove("sorted-asc", "sorted-desc");
+        if (th.dataset.sort === campoOrdinamento) {
+          th.classList.add(asc ? "sorted-asc" : "sorted-desc");
+        }
+      });
+
+      // listener ordinamento
+      table.querySelectorAll('th[data-sort]').forEach(th => {
+        th.onclick = () => {
+          const campo = th.dataset.sort;
+          if (campoOrdinamento === campo) {
+            asc = !asc;
+          } else {
+            campoOrdinamento = campo;
+            asc = false;
+          }
+          renderTabella(document.getElementById("filtro").value.toLowerCase());
+        };
+      });
+
+      contenitore.appendChild(table);
+    }
+
+    document.getElementById('filtro').addEventListener('input', () =>
+      renderTabella(document.getElementById("filtro").value.toLowerCase())
+    );
+
     document.addEventListener('DOMContentLoaded', caricaDati);
   </script>
 </body>

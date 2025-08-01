@@ -81,6 +81,8 @@
       let righeVisibili = 0;
 
       dati.forEach(row => {
+        console.log(`👤 ${row.nome} (${row.email}) → login_oggi: ${row.login_oggi}, tempo: ${row.tempo_utilizzo}`);
+
         if (filtro && !row.nome.toLowerCase().includes(filtro)) return;
 
         const tr = document.createElement("tr");
@@ -106,6 +108,7 @@
 
   document.addEventListener("DOMContentLoaded", caricaStatistiche);
 </script>
+
 
 </body>
 </html>

@@ -82,8 +82,6 @@ export default async function handler(req, res) {
         }
       }
 
-      console.log('📥 Accessi ricevuti da Supabase:', accessi);
-
       loginMap[user_id] = loginCount;
       tempoMap[user_id] = tempo;
     }
@@ -123,7 +121,4 @@ export default async function handler(req, res) {
     console.error("[statsPerCliente] ERRORE:", err);
     return res.status(500).json({ error: err.message });
   }
-  console.log('📊 loginMap:', loginMap);
-console.log('⏱ tempoMap:', tempoMap);
-
 }

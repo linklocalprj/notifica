@@ -3,8 +3,6 @@
 <head>
   <meta charset="UTF-8">
   <title>Postami – Admin</title>
-  <link rel="manifest" href="/manifest.json">
-  <meta name="theme-color" content="#2e3b55">
   <script type="module" src="/supabase-auth-admin.js"></script>
   <style>
     body {
@@ -65,7 +63,7 @@
         <a href="/attesa-pubblicazione.html">🔑 Gestione Pubblicazioni</a>
       </div>
             <div class="menu-item">
-        <a href="/cleanup.html" target="_blank">🔑 Gestione Database Media</a>
+        <a href="/cleanup.html">🔑 Gestione Database Media</a>
       </div>
       <div class="menu-item">
         <a href="/stats.html">📊 Statistiche Base Utenti</a>
@@ -86,14 +84,14 @@
   </div>
 
   <script>
-    if ('serviceWorker' in navigator) {
-      window.addEventListener('load', () => {
-        navigator.serviceWorker.register('/sw.js')
-          .then(() => console.log('✅ Service Worker registrato'))
-          .catch(err => console.error('❌ Service Worker error:', err));
-      });
-    }
+            if ('serviceWorker' in navigator) {
+        window.addEventListener('load', () => {
+            navigator.serviceWorker.register('/sw.js')
+            .then(() => console.log('✅ Service Worker registrato'))
+            .catch(err => console.error('❌ Service Worker error:', err));
+        });
+        }
+
   </script>
 </body>
 </html>
-

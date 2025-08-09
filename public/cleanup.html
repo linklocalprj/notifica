@@ -7,13 +7,17 @@
     table { border-collapse: collapse; width: 100%; }
     th, td { border: 1px solid #ccc; padding: 6px; }
     th { background: #eee; }
-    button { padding: 4px 8px; }
+    button { padding: 4px 8px; margin: 0 2px; }
     .muted { color:#666; font-size:12px; }
   </style>
 </head>
 <body>
   <h1>Post inviati – pulizia media</h1>
-  <p class="muted">Qui vedi i post con <code>stato_invio = sent</code>. Clicca “Elimina media” per sostituire <code>immagine_url</code> con il placeholder.</p>
+  <p class="muted">
+    Qui vedi i post con <code>stato_invio = sent</code>.  
+    Usa <b>Elimina media</b> per rimuovere il file dal bucket.  
+    Poi <b>Elimina riga</b> per sostituire con il placeholder e far sparire la riga dalla lista.
+  </p>
 
   <table id="posts-table">
     <thead>
@@ -41,7 +45,6 @@
 
   async function loadAllForCleanup() {
     try {
-      // ✅ usa l’endpoint unico: GET + action=load
       const res = await fetch('/api/loadCleanImage?action=load');
       if (!res.ok) throw new Error(await res.text());
       const raw = await res.json();
@@ -73,25 +76,59 @@
         <td>${cliente}</td>
         <td>${dataPub}</td>
         <td>${typeof mediaUrl === 'string' && mediaUrl !== '-' ? `<a href="${mediaUrl}" target="_blank">apri</a>` : '-'}</td>
-        <td><button id="btn-del-${r.table}-${r.id}">Elimina media</button></td>
+        <td>
+          <button id="btn-del-media-${r.table}-${r.id}">🗑 Elimina media</button>
+          <button id="btn-del-riga-${r.table}-${r.id}">🚫 Elimina riga</button>
+        </td>
       `;
       tbody.appendChild(tr);
 
       document
-        .getElementById(`btn-del-${r.table}-${r.id}`)
-        .addEventListener('click', () => eliminaMedia(r));
+        .getElementById(`btn-del-media-${r.table}-${r.id}`)
+        .addEventListener('click', () => eliminaSoloMedia(r));
+
+      document
+        .getElementById(`btn-del-riga-${r.table}-${r.id}`)
+        .addEventListener('click', () => eliminaRiga(r));
     });
   }
 
-  async function eliminaMedia(row) {
-    const btnId = `btn-del-${row.table}-${row.id}`;
-    const btn = document.getElementById(btnId);
+  // 🔹 Step 1: elimina solo il file dal bucket
+  async function eliminaSoloMedia(row) {
+    if (!row.immagine_url) {
+      alert('Nessun media da eliminare');
+      return;
+    }
+    const btn = document.getElementById(`btn-del-media-${row.table}-${row.id}`);
     btn.disabled = true;
     const prevTxt = btn.textContent;
     btn.textContent = '…';
-
     try {
-      // ✅ endpoint unico: POST + action=reset
+      const resp = await fetch('/api/loadCleanImage', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'deleteFile',
+          oldUrl: row.immagine_url
+        })
+      });
+      if (!resp.ok) throw new Error(await resp.text());
+      alert('✅ Media eliminato dal bucket');
+    } catch (err) {
+      alert('Errore eliminazione media: ' + err.message);
+    } finally {
+      btn.disabled = false;
+      btn.textContent = prevTxt;
+    }
+  }
+
+  // 🔹 Step 2: sostituisce immagine con placeholder e segna pub_end
+  async function eliminaRiga(row) {
+    const btn = document.getElementById(`btn-del-riga-${row.table}-${row.id}`);
+    btn.disabled = true;
+    const prevTxt = btn.textContent;
+    btn.textContent = '…';
+    try {
       const resp = await fetch('/api/loadCleanImage', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -103,11 +140,9 @@
         })
       });
       if (!resp.ok) throw new Error(await resp.text());
-
-      // 🔄 ricarica la lista (filtra via pub_end=false lato backend)
       await loadAllForCleanup();
     } catch (err) {
-      alert('Errore: ' + err.message);
+      alert('Errore eliminazione riga: ' + err.message);
       btn.disabled = false;
       btn.textContent = prevTxt;
     }

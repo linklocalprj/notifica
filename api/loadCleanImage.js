@@ -64,39 +64,42 @@ export default async function handler(req, res) {
   // ========================
   // 2) RESET IMAGE
   // ========================
-  if (req.method === 'POST' && action === 'reset') {
-    const { table, id, placeholder } = req.body;
-    if (!table || !id) {
-      return res.status(400).json({ error: 'Mancano table o id' });
-    }
-
-const PLACEHOLDER =
-  placeholder || 'https://jljljrkubullcrspicvj.supabase.co/storage/v1/object/public/post-images/placeholders/placeholder.jpg';
-
-
-    try {
-      const url = `${SUPABASE_URL}/rest/v1/${table}?id=eq.${id}`;
-      const body = { immagine_url: PLACEHOLDER };
-
-      const resp = await fetch(url, {
-        method: 'PATCH',
-        headers: {
-          apikey: SERVICE_ROLE,
-          Authorization: `Bearer ${SERVICE_ROLE}`,
-          'Content-Type': 'application/json',
-          Prefer: 'return=minimal'
-        },
-        body: JSON.stringify(body)
-      });
-
-      const text = await resp.text();
-      if (!resp.ok) return res.status(500).json({ error: text });
-      return res.status(200).json({ success: true });
-    } catch (err) {
-      console.error('[cleanupHandler-reset]', err);
-      return res.status(500).json({ error: 'Errore interno' });
-    }
+// POST /api/loadCleanImage  { action:"reset", table, id, placeholder? }
+if (req.method === 'POST' && action === 'reset') {
+  const { table, id, placeholder } = req.body;
+  if (!table || !id) {
+    return res.status(400).json({ error: 'Mancano table o id' });
   }
+
+  const PLACEHOLDER =
+    placeholder || 'https://jljljrkubullcrspicvj.supabase.co/storage/v1/object/public/post-images/placeholders/placeholder.jpg';
+
+  try {
+    const url = `${process.env.SUPABASE_URL}/rest/v1/${table}?id=eq.${id}`;
+    const resp = await fetch(url, {
+      method: 'PATCH',
+      headers: {
+        apikey: process.env.SUPABASE_SERVICE_ROLE,
+        Authorization: `Bearer ${process.env.SUPABASE_SERVICE_ROLE}`,
+        'Content-Type': 'application/json',
+        // ritorna la riga aggiornata per debug
+        Prefer: 'return=representation'
+      },
+      body: JSON.stringify({ immagine_url: PLACEHOLDER })
+    });
+
+    const json = await resp.json();
+    if (!resp.ok) {
+      // utile per capire subito l’errore (RLS, nome colonna, ecc.)
+      return res.status(500).json({ error: json });
+    }
+
+    return res.status(200).json({ success: true, updated: json });
+  } catch (err) {
+    console.error('[loadCleanImage reset] errore:', err);
+    return res.status(500).json({ error: 'Errore interno' });
+  }
+}
 
   // ========================
   // Metodo non consentito

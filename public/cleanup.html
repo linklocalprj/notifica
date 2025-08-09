@@ -103,6 +103,8 @@ async function eliminaMedia(row) {
     });
     if (!resp.ok) throw new Error(await resp.text());
 
+    await loadAllForCleanup();
+
     // Rimuovi la riga dalla tabella
     const tr = btn.closest('tr');
     if (tr) tr.remove();

@@ -92,7 +92,7 @@ async function eliminaMedia(row) {
   btn.textContent = '…';
 
   try {
-    const resp = await fetch('/api/resetImage', {
+    const resp = await fetch('/api/loadCleanImage', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({

@@ -64,7 +64,10 @@ export default async function handler(req, res) {
   // ========================
   // 2) DELETE THE FILE
   // ========================
-    if (req.method === 'POST' && action === 'deleteFile') {
+// ========================
+// 3) DELETE FILE
+// ========================
+if (req.method === 'POST' && action === 'deleteFile') {
   const { oldUrl } = req.body;
   if (!oldUrl) {
     return res.status(400).json({ error: 'Manca oldUrl' });
@@ -77,16 +80,13 @@ export default async function handler(req, res) {
     }
 
     const { bucket, path } = parsed;
-    const delResp = await fetch(
-      `${SUPABASE_URL}/storage/v1/object/${bucket}/${path}`,
-      {
-        method: 'DELETE',
-        headers: {
-          apikey: SERVICE_ROLE,
-          Authorization: `Bearer ${SERVICE_ROLE}`
-        }
+    const delResp = await fetch(`${SUPABASE_URL}/storage/v1/object/${bucket}/${path}`, {
+      method: 'DELETE',
+      headers: {
+        apikey: SERVICE_ROLE,
+        Authorization: `Bearer ${SERVICE_ROLE}`
       }
-    );
+    });
 
     if (!delResp.ok) {
       const errTxt = await delResp.text();
@@ -99,6 +99,31 @@ export default async function handler(req, res) {
     return res.status(500).json({ error: 'Errore interno' });
   }
 }
+
+// Helper per estrarre bucket e path da una URL Supabase Storage
+function parseStorageUrl(url, base) {
+  try {
+    const u = new URL(url);
+    const b = new URL(base);
+    if (u.origin !== b.origin) return null;
+
+    const parts = u.pathname.split('/').filter(Boolean);
+    const idx = parts.indexOf('object');
+    if (idx === -1) return null;
+
+    let bucketIndex = idx + 1;
+    if (parts[bucketIndex] === 'public' || parts[bucketIndex] === 'sign') {
+      bucketIndex++;
+    }
+
+    const bucket = parts[bucketIndex];
+    const path = parts.slice(bucketIndex + 1).join('/');
+    return { bucket, path };
+  } catch {
+    return null;
+  }
+}
+
 
 
   // ========================

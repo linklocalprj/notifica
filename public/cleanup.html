@@ -41,7 +41,8 @@
 
   async function loadAllForCleanup() {
     try {
-      const res = await fetch('/api/loadAllForCleanup');
+      // ✅ usa l’endpoint unico con action=load
+      const res = await fetch('/api/loadCleanImage?action=load');
       if (!res.ok) throw new Error(await res.text());
       const raw = await res.json();
       if (!Array.isArray(raw)) throw new Error('Formato dati non valido');
@@ -76,7 +77,8 @@
       `;
       tbody.appendChild(tr);
 
-      document.getElementById(`btn-del-${r.table}-${r.id}`)
+      document
+        .getElementById(`btn-del-${r.table}-${r.id}`)
         .addEventListener('click', () => eliminaMedia(r));
     });
   }
@@ -89,10 +91,12 @@
     btn.textContent = '…';
 
     try {
-      const resp = await fetch('/api/resetImage', {
+      // ✅ POST all’endpoint unico con action=reset
+      const resp = await fetch('/api/loadCleanImage', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          action: 'reset',
           table: row.table,
           id: row.id,
           placeholder: PLACEHOLDER

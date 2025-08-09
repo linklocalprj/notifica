@@ -125,8 +125,11 @@ function parseStorageUrl(url, base) {
 // ========================
 // 4) LIST BUCKET FILES
 // ========================
+// ========================
+// 3) LISTA TUTTI I FILE NEL BUCKET
+// ========================
 if (req.method === 'GET' && action === 'listBucket') {
-  const BUCKET = 'post-images'; // cambia se usi un bucket diverso
+  const BUCKET = 'post-images'; // nome del bucket
   try {
     const listUrl = `${SUPABASE_URL}/storage/v1/object/list/${BUCKET}`;
     const resp = await fetch(listUrl, {
@@ -136,7 +139,11 @@ if (req.method === 'GET' && action === 'listBucket') {
         Authorization: `Bearer ${SERVICE_ROLE}`,
         'Content-Type': 'application/json'
       },
-      body: JSON.stringify({ limit: 1000, offset: 0, sortBy: { column: 'created_at', order: 'desc' } })
+      body: JSON.stringify({
+        limit: 1000,
+        offset: 0,
+        sortBy: { column: 'created_at', order: 'desc' }
+      })
     });
 
     if (!resp.ok) {
@@ -146,7 +153,7 @@ if (req.method === 'GET' && action === 'listBucket') {
 
     const files = await resp.json();
 
-    // Mappo con URL pubblico e date leggibili
+    // Creo la lista con URL pubblico e date leggibili
     const mapped = files.map(f => ({
       name: f.name,
       url: `${SUPABASE_URL}/storage/v1/object/public/${BUCKET}/${f.name}`,
@@ -159,6 +166,67 @@ if (req.method === 'GET' && action === 'listBucket') {
     return res.status(500).json({ error: 'Errore interno' });
   }
 }
+
+// ========================
+// 4) ELIMINA FILE DAL BUCKET
+// ========================
+if (req.method === 'POST' && action === 'deleteFile') {
+  const { oldUrl } = req.body;
+  if (!oldUrl) {
+    return res.status(400).json({ error: 'Manca oldUrl' });
+  }
+
+  try {
+    const parsed = parseStorageUrl(oldUrl, SUPABASE_URL);
+    if (!parsed) {
+      return res.status(400).json({ error: 'URL non valido o non nel dominio Supabase' });
+    }
+
+    const { bucket, path } = parsed;
+    const delResp = await fetch(`${SUPABASE_URL}/storage/v1/object/${bucket}/${path}`, {
+      method: 'DELETE',
+      headers: {
+        apikey: SERVICE_ROLE,
+        Authorization: `Bearer ${SERVICE_ROLE}`
+      }
+    });
+
+    if (!delResp.ok) {
+      const errTxt = await delResp.text();
+      return res.status(500).json({ error: errTxt });
+    }
+
+    return res.status(200).json({ success: true });
+  } catch (err) {
+    console.error('[deleteFile] errore:', err);
+    return res.status(500).json({ error: 'Errore interno' });
+  }
+}
+
+// Helper per estrarre bucket e path da una URL Supabase Storage
+function parseStorageUrl(url, base) {
+  try {
+    const u = new URL(url);
+    const b = new URL(base);
+    if (u.origin !== b.origin) return null;
+
+    const parts = u.pathname.split('/').filter(Boolean);
+    const idx = parts.indexOf('object');
+    if (idx === -1) return null;
+
+    let bucketIndex = idx + 1;
+    if (parts[bucketIndex] === 'public' || parts[bucketIndex] === 'sign') {
+      bucketIndex++;
+    }
+
+    const bucket = parts[bucketIndex];
+    const path = parts.slice(bucketIndex + 1).join('/');
+    return { bucket, path };
+  } catch {
+    return null;
+  }
+}
+
 
 
   // ========================

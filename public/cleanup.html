@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <title>Cleanup Media</title>
   <style>
-    table { border-collapse: collapse; width: 100%; }
+    table { border-collapse: collapse; width: 100%; margin-bottom: 30px; }
     th, td { border: 1px solid #ccc; padding: 6px; }
     th { background: #eee; }
     button { padding: 4px 8px; margin: 0 2px; }
@@ -15,8 +15,8 @@
   <h1>Post inviati – pulizia media</h1>
   <p class="muted">
     Qui vedi i post con <code>stato_invio = sent</code>.  
-    Usa <b>Elimina media</b> per rimuovere il file dal bucket.  
-    Poi <b>Elimina riga</b> per sostituire con il placeholder e far sparire la riga dalla lista.
+    - <b>Elimina media</b>: rimuove il file dal bucket.  
+    - <b>Elimina riga</b>: sostituisce con placeholder e marca come completato.
   </p>
 
   <table id="posts-table">
@@ -34,18 +34,18 @@
   </table>
 
   <h2>📂 Tutti i file nel bucket</h2>
-<table id="bucket-table">
-  <thead>
-    <tr>
-      <th>Nome file</th>
-      <th>Data upload</th>
-      <th>Preview</th>
-      <th>Azioni</th>
-    </tr>
-  </thead>
-  <tbody></tbody>
-</table>
-
+  <p class="muted">Elenco di tutti i file presenti nel bucket <code>post-images</code> con data di caricamento. Puoi eliminarli anche se non sono associati a un post.</p>
+  <table id="bucket-table">
+    <thead>
+      <tr>
+        <th>Nome file</th>
+        <th>Data upload</th>
+        <th>Preview</th>
+        <th>Azioni</th>
+      </tr>
+    </thead>
+    <tbody></tbody>
+  </table>
 
 <script type="module">
   const tableLabels = {
@@ -57,6 +57,9 @@
 
   const PLACEHOLDER = 'https://jljljrkubullcrspicvj.supabase.co/storage/v1/object/public/post-images/placeholders/placeholder.jpg';
 
+  // ====================
+  // SEZIONE 1: POST
+  // ====================
   async function loadAllForCleanup() {
     try {
       const res = await fetch('/api/loadCleanImage?action=load');
@@ -68,13 +71,13 @@
         ...r,
         piattaforma: tableLabels[r.table] ?? r.table
       }));
-      renderTable(rows);
+      renderPostsTable(rows);
     } catch (e) {
       alert('Errore caricamento: ' + e.message);
     }
   }
 
-  function renderTable(rows) {
+  function renderPostsTable(rows) {
     const tbody = document.querySelector('#posts-table tbody');
     tbody.innerHTML = '';
 
@@ -107,7 +110,6 @@
     });
   }
 
-  // 🔹 Step 1: elimina solo il file dal bucket
   async function eliminaSoloMedia(row) {
     if (!row.immagine_url) {
       alert('Nessun media da eliminare');
@@ -136,7 +138,6 @@
     }
   }
 
-  // 🔹 Step 2: sostituisce immagine con placeholder e segna pub_end
   async function eliminaRiga(row) {
     const btn = document.getElementById(`btn-del-riga-${row.table}-${row.id}`);
     btn.disabled = true;
@@ -162,66 +163,66 @@
     }
   }
 
-  document.addEventListener('DOMContentLoaded', loadAllForCleanup);
-</script>
-
-<script>
+  // ====================
+  // SEZIONE 2: BUCKET
+  // ====================
   async function loadAllBucketFiles() {
-  try {
-    const res = await fetch('/api/loadCleanImage?action=listBucket');
-    if (!res.ok) throw new Error(await res.text());
-    const files = await res.json();
-    renderBucketTable(files);
-  } catch (e) {
-    alert('Errore caricamento bucket: ' + e.message);
+    try {
+      const res = await fetch('/api/loadCleanImage?action=listBucket');
+      if (!res.ok) throw new Error(await res.text());
+      const files = await res.json();
+      renderBucketTable(files);
+    } catch (e) {
+      alert('Errore caricamento bucket: ' + e.message);
+    }
   }
-}
 
-function renderBucketTable(files) {
-  const tbody = document.querySelector('#bucket-table tbody');
-  tbody.innerHTML = '';
+  function renderBucketTable(files) {
+    const tbody = document.querySelector('#bucket-table tbody');
+    tbody.innerHTML = '';
 
-  files.forEach(f => {
-    const tr = document.createElement('tr');
-    const dateStr = f.created_at ? new Date(f.created_at).toLocaleString() : '-';
-    tr.innerHTML = `
-      <td>${f.name}</td>
-      <td>${dateStr}</td>
-      <td><a href="${f.url}" target="_blank">apri</a></td>
-      <td><button id="btn-bucket-del-${encodeURIComponent(f.name)}">Elimina</button></td>
-    `;
-    tbody.appendChild(tr);
+    files.forEach(f => {
+      const tr = document.createElement('tr');
+      const dateStr = f.created_at ? new Date(f.created_at).toLocaleString() : '-';
+      tr.innerHTML = `
+        <td>${f.name}</td>
+        <td>${dateStr}</td>
+        <td><a href="${f.url}" target="_blank">apri</a></td>
+        <td><button id="btn-bucket-del-${encodeURIComponent(f.name)}">Elimina</button></td>
+      `;
+      tbody.appendChild(tr);
 
-    document
-      .getElementById(`btn-bucket-del-${encodeURIComponent(f.name)}`)
-      .addEventListener('click', () => eliminaFileBucket(f.url));
-  });
-}
-
-async function eliminaFileBucket(fileUrl) {
-  if (!confirm('Eliminare definitivamente questo file?')) return;
-  try {
-    const resp = await fetch('/api/loadCleanImage', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        action: 'deleteFile',
-        oldUrl: fileUrl
-      })
+      document
+        .getElementById(`btn-bucket-del-${encodeURIComponent(f.name)}`)
+        .addEventListener('click', () => eliminaFileBucket(f.url));
     });
-    if (!resp.ok) throw new Error(await resp.text());
-    await loadAllBucketFiles();
-  } catch (err) {
-    alert('Errore eliminazione file: ' + err.message);
   }
-}
 
-// Richiama anche il caricamento dei file bucket quando la pagina è pronta
-document.addEventListener('DOMContentLoaded', () => {
-  loadAllForCleanup(); // la logica esistente
-  loadAllBucketFiles(); // nuovo caricamento media orfani
-});
+  async function eliminaFileBucket(fileUrl) {
+    if (!confirm('Eliminare definitivamente questo file?')) return;
+    try {
+      const resp = await fetch('/api/loadCleanImage', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'deleteFile',
+          oldUrl: fileUrl
+        })
+      });
+      if (!resp.ok) throw new Error(await resp.text());
+      await loadAllBucketFiles();
+    } catch (err) {
+      alert('Errore eliminazione file: ' + err.message);
+    }
+  }
 
+  // ====================
+  // INIT
+  // ====================
+  document.addEventListener('DOMContentLoaded', () => {
+    loadAllForCleanup();
+    loadAllBucketFiles();
+  });
 </script>
 
 </body>

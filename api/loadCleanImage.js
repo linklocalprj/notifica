@@ -64,9 +64,7 @@ export default async function handler(req, res) {
   // ========================
   // 2) DELETE THE FILE
   // ========================
-// ========================
-// 3) DELETE FILE
-// ========================
+
 if (req.method === 'POST' && action === 'deleteFile') {
   const { oldUrl } = req.body;
   if (!oldUrl) {
@@ -124,6 +122,43 @@ function parseStorageUrl(url, base) {
   }
 }
 
+// ========================
+// 4) LIST BUCKET FILES
+// ========================
+if (req.method === 'GET' && action === 'listBucket') {
+  const BUCKET = 'post-images'; // cambia se usi un bucket diverso
+  try {
+    const listUrl = `${SUPABASE_URL}/storage/v1/object/list/${BUCKET}`;
+    const resp = await fetch(listUrl, {
+      method: 'POST',
+      headers: {
+        apikey: SERVICE_ROLE,
+        Authorization: `Bearer ${SERVICE_ROLE}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ limit: 1000, offset: 0, sortBy: { column: 'created_at', order: 'desc' } })
+    });
+
+    if (!resp.ok) {
+      const errTxt = await resp.text();
+      return res.status(500).json({ error: errTxt });
+    }
+
+    const files = await resp.json();
+
+    // Mappo con URL pubblico e date leggibili
+    const mapped = files.map(f => ({
+      name: f.name,
+      url: `${SUPABASE_URL}/storage/v1/object/public/${BUCKET}/${f.name}`,
+      created_at: f.created_at || f.updated_at || null
+    }));
+
+    return res.status(200).json(mapped);
+  } catch (err) {
+    console.error('[listBucket] errore:', err);
+    return res.status(500).json({ error: 'Errore interno' });
+  }
+}
 
 
   // ========================

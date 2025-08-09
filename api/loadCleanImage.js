@@ -1,3 +1,10 @@
+// In cima a loadCleanImage.js
+import { createClient } from '@supabase/supabase-js';
+
+const supabaseAdmin = createClient(SUPABASE_URL, SERVICE_ROLE);
+
+
+
 // pages/api/loadCleanImage.js
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SERVICE_ROLE = process.env.SUPABASE_SERVICE_ROLE;
@@ -105,42 +112,31 @@ export default async function handler(req, res) {
   // ========================
   // 3) LISTA FILE BUCKET
   // ========================
-  if (req.method === 'GET' && action === 'listBucket') {
-    const BUCKET = 'post-images';
-    try {
-      const listUrl = `${SUPABASE_URL}/storage/v1/object/list/${BUCKET}`;
-      const resp = await fetch(listUrl, {
-        method: 'POST',
-        headers: {
-          apikey: SERVICE_ROLE,
-          Authorization: `Bearer ${SERVICE_ROLE}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          limit: 1000,
-          offset: 0,
-          sortBy: { column: 'created_at', order: 'desc' }
-        })
+if (req.method === 'GET' && action === 'listBucket') {
+  try {
+    const { data, error } = await supabaseAdmin
+      .storage
+      .from('post-images')
+      .list('', {
+        limit: 1000,
+        sortBy: { column: 'name', order: 'desc' }
       });
 
-      if (!resp.ok) {
-        const errTxt = await resp.text();
-        return res.status(500).json({ error: errTxt });
-      }
+    if (error) throw error;
 
-      const files = await resp.json();
-      const mapped = files.map(f => ({
-        name: f.name,
-        url: `${SUPABASE_URL}/storage/v1/object/public/${BUCKET}/${f.name}`,
-        created_at: f.created_at || f.updated_at || null
-      }));
+    const mapped = data.map(file => ({
+      name: file.name,
+      url: supabaseAdmin.storage.from('post-images').getPublicUrl(file.name).data.publicUrl,
+      created_at: file.updated_at || null
+    }));
 
-      return res.status(200).json(mapped);
-    } catch (err) {
-      console.error('[listBucket] errore:', err);
-      return res.status(500).json({ error: 'Errore interno' });
-    }
+    return res.status(200).json(mapped);
+  } catch (err) {
+    console.error('[listBucket] errore:', err);
+    return res.status(500).json({ error: err.message });
   }
+}
+
 
   // ========================
   // 4) DELETE FILE BUCKET

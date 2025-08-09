@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8">
+  <title>Cleanup Media</title>
+  <style>
+    table { border-collapse: collapse; width: 100%; }
+    th, td { border: 1px solid #ccc; padding: 6px; }
+    th { background: #eee; }
+    button { padding: 4px 8px; }
+    .muted { color:#666; font-size:12px; }
+  </style>
+</head>
+<body>
+  <h1>Post inviati – pulizia media</h1>
+  <p class="muted">Qui vedi i post con <code>stato_invio = sent</code>. Clicca “Elimina media” quando vuoi liberare spazio (verrà messo il placeholder).</p>
+
+  <table id="posts-table">
+    <thead>
+      <tr>
+        <th>ID</th>
+        <th>Piattaforma</th>
+        <th>Cliente</th>
+        <th>Data Pubblicazione</th>
+        <th>Media</th>
+        <th>Azioni</th>
+      </tr>
+    </thead>
+    <tbody></tbody>
+  </table>
+
+<script type="module">
+  // 🔧 CONFIG
+  const MAKE_WEBHOOK_URL = "https://hook.integromat.com/REPLACE_WITH_YOURS"; // <-- metti il tuo
+
+  const tableLabels = {
+    pubblicazioni_facebook:  'Facebook',
+    pubblicazioni_instagram: 'Instagram',
+    pubblicazioni_linkedin:  'LinkedIn',
+    pubblicazioni_google:    'Google'
+  };
+
+  async function loadAllForCleanup() {
+    try {
+      const res = await fetch('/api/loadAllForCleanup');
+      if (!res.ok) throw new Error(await res.text());
+      const raw = await res.json();
+      if (!Array.isArray(raw)) throw new Error('Formato dati non valido');
+
+      const rows = raw.map(r => ({
+        ...r,
+        piattaforma: tableLabels[r.table] ?? r.table
+      }));
+      renderTable(rows);
+    } catch (e) {
+      alert('Errore caricamento: ' + e.message);
+    }
+  }
+
+  function renderTable(rows) {
+    const tbody = document.querySelector('#posts-table tbody');
+    tbody.innerHTML = '';
+
+    rows.forEach(r => {
+      const cliente   = r.nome_azienda ?? r.azienda ?? '-';
+      const mediaUrl  = r.video_url || r.immagine_url || r.media || '-';
+      const dataPub   = r.data_pubblicazione || '-';
+
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td>${r.id}</td>
+        <td>${r.piattaforma}</td>
+        <td>${cliente}</td>
+        <td>${dataPub}</td>
+        <td>${mediaUrl ? `<a href="${mediaUrl}" target="_blank">apri</a>` : '-'}</td>
+        <td><button id="btn-del-${r.table}-${r.id}">Elimina media</button></td>
+      `;
+      tbody.appendChild(tr);
+
+      document.getElementById(`btn-del-${r.table}-${r.id}`)
+        .addEventListener('click', () => eliminaMedia(r));
+    });
+  }
+
+  function extractStorageInfoFromUrl(mediaUrl) {
+    // Supporta: /storage/v1/object/public/<bucket>/<path>
+    //           /storage/v1/object/sign/<bucket>/<path>?token=...
+    try {
+      const u = new URL(mediaUrl);
+      const parts = u.pathname.split('/').filter(Boolean); // ["storage","v1","object","public","bucket","..."] oppure "sign"
+      const objIdx = parts.indexOf('object');
+      if (objIdx === -1) return null;
+
+      const visibility = parts[objIdx + 1];          // "public" | "sign"
+      const bucket     = parts[objIdx + 2];          // sempre bucket
+      const objectPath = parts.slice(objIdx + 3).join('/'); // resto del path
+      if (!bucket || !objectPath) return null;
+      return { bucket, objectPath };
+    } catch {
+      return null;
+    }
+  }
+
+  async function eliminaMedia(row) {
+    const btnId = `btn-del-${row.table}-${row.id}`;
+    const btn = document.getElementById(btnId);
+    btn.disabled = true;
+    const prevTxt = btn.textContent;
+    btn.textContent = '…';
+
+    // scegliamo la colonna media in base a cosa c'è
+    const mediaColumn = row.video_url ? 'video_url'
+                      : row.immagine_url ? 'immagine_url'
+                      : row.media ? 'media'
+                      : null;
+
+    const mediaUrl = row[mediaColumn];
+    if (!mediaColumn || !mediaUrl) {
+      alert('❌ Nessun media da eliminare');
+      btn.disabled = false; btn.textContent = prevTxt; return;
+    }
+
+    const info = extractStorageInfoFromUrl(mediaUrl);
+    if (!info) {
+      alert('❌ URL media non riconosciuto come file Supabase Storage');
+      btn.disabled = false; btn.textContent = prevTxt; return;
+    }
+
+    const payload = {
+      table: row.table,
+      id: row.id,
+      media_column: mediaColumn,
+      bucket: info.bucket,
+      object_path: info.objectPath,
+      placeholder_url: "https://cdn.tuodominio.com/placeholder-media.png"
+    };
+
+    if (!MAKE_WEBHOOK_URL || MAKE_WEBHOOK_URL.includes('REPLACE_WITH_YOURS')) {
+      alert('Configura MAKE_WEBHOOK_URL.');
+      btn.disabled = false; btn.textContent = prevTxt; return;
+    }
+
+    try {
+      const resp = await fetch(MAKE_WEBHOOK_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+      if (!resp.ok) throw new Error(await resp.text());
+      btn.textContent = '✅';
+    } catch (err) {
+      alert('Errore: ' + err.message);
+      btn.disabled = false;
+      btn.textContent = prevTxt;
+    }
+  }
+
+  document.addEventListener('DOMContentLoaded', loadAllForCleanup);
+</script>
+</body>
+</html>

@@ -1,15 +1,14 @@
-// In cima a loadCleanImage.js
+// pages/api/loadCleanImage.js
 import { createClient } from '@supabase/supabase-js';
 
-const supabaseAdmin = createClient(SUPABASE_URL, SERVICE_ROLE);
+const SUPABASE_URL   = process.env.SUPABASE_URL;
+const SERVICE_ROLE   = process.env.SUPABASE_SERVICE_ROLE;
+const supabase       = createClient(SUPABASE_URL, SERVICE_ROLE);
 
+const PLACEHOLDER_DEFAULT =
+  `${SUPABASE_URL}/storage/v1/object/public/post-images/placeholders/placeholder.jpg`;
 
-
-// pages/api/loadCleanImage.js
-const SUPABASE_URL = process.env.SUPABASE_URL;
-const SERVICE_ROLE = process.env.SUPABASE_SERVICE_ROLE;
-
-const tables = [
+const TABLES = [
   'pubblicazioni_facebook',
   'pubblicazioni_instagram',
   'pubblicazioni_linkedin',
@@ -17,189 +16,173 @@ const tables = [
 ];
 
 export default async function handler(req, res) {
-  const action = req.query.action || req.body?.action;
+  try {
+    const action = req.query.action || req.body?.action;
 
-  // ========================
-  // 1) LOAD ALL FOR CLEANUP
-  // ========================
-  if (req.method === 'GET' && action === 'load') {
-    try {
-      const allPubs = await Promise.all(tables.map(async table => {
-        const url = new URL(`${SUPABASE_URL}/rest/v1/${table}`);
-        url.searchParams.set('stato_invio', 'eq.sent');
-        url.searchParams.set('pub_end', 'is.false');
-        const resp = await fetch(url, {
-          headers: {
-            apikey: SERVICE_ROLE,
-            Authorization: `Bearer ${SERVICE_ROLE}`
-          }
-        });
-        if (!resp.ok) throw new Error(`Errore ${table}: ${await resp.text()}`);
-        const data = await resp.json();
-        return data.map(r => ({ ...r, table }));
-      }));
-      const pubs = allPubs.flat();
+    // ========================
+    // 1) LOAD: post "sent" da pulire
+    //    (niente pub_end: filtriamo escludendo i record
+    //     che hanno già il placeholder)
+    // ========================
+    if (req.method === 'GET' && action === 'load') {
+      const results = await Promise.all(
+        TABLES.map(async (table) => {
+          const { data, error } = await supabase
+            .from(table)
+            .select('*')
+            .eq('stato_invio', 'sent')
+            .neq('immagine_url', PLACEHOLDER_DEFAULT);
 
-      // Email gestori
+          if (error) throw new Error(`${table}: ${error.message}`);
+          return (data || []).map((r) => ({ ...r, table }));
+        })
+      );
+
+      const pubs = results.flat();
+
+      // opzionale: porta dentro i contatti gestori
       const userIds = Array.from(new Set(pubs.map(r => r.user_id).filter(Boolean)));
-      let configsMap = {};
+      let contatti = {};
       if (userIds.length) {
-        const cfgUrl = new URL(`${SUPABASE_URL}/rest/v1/config_prenotazioni`);
-        cfgUrl.searchParams.set('user_id', `in.(${userIds.join(',')})`);
-        const cfgResp = await fetch(cfgUrl, {
-          headers: {
-            apikey: SERVICE_ROLE,
-            Authorization: `Bearer ${SERVICE_ROLE}`
-          }
-        });
-        if (!cfgResp.ok) throw new Error(`Errore config_prenotazioni: ${await cfgResp.text()}`);
-        const cfgData = await cfgResp.json();
-        configsMap = Object.fromEntries(cfgData.map(c => [c.user_id, c.contatto]));
+        const { data: cfg, error: cfgErr } = await supabase
+          .from('config_prenotazioni')
+          .select('user_id, contatto')
+          .in('user_id', userIds);
+        if (cfgErr) throw new Error(`config_prenotazioni: ${cfgErr.message}`);
+        contatti = Object.fromEntries((cfg || []).map(c => [c.user_id, c.contatto]));
       }
 
       const rows = pubs.map(r => ({
         ...r,
-        email_gestore: configsMap[r.user_id] || null
+        email_gestore: contatti[r.user_id] || null
       }));
 
       return res.status(200).json(rows);
-    } catch (err) {
-      console.error('[cleanupHandler-load]', err);
-      return res.status(500).json({ error: err.message });
-    }
-  }
-
-  // ========================
-  // 2) RESET IMAGE
-  // ========================
-  if (req.method === 'POST' && action === 'reset') {
-    const { table, id, placeholder } = req.body;
-    if (!table || !id) {
-      return res.status(400).json({ error: 'Mancano table o id' });
     }
 
-    const PLACEHOLDER =
-      placeholder || `${SUPABASE_URL}/storage/v1/object/public/post-images/placeholders/placeholder.jpg`;
+    // ========================
+    // 2) RESET: metti placeholder (e basta)
+    // ========================
+    if (req.method === 'POST' && action === 'reset') {
+      const { table, id, placeholder } = req.body || {};
+      if (!table || !id) {
+        return res.status(400).json({ error: 'Mancano table o id' });
+      }
+      const PLACEHOLDER = placeholder || PLACEHOLDER_DEFAULT;
 
-    try {
-      const url = `${SUPABASE_URL}/rest/v1/${table}?id=eq.${id}`;
-      const resp = await fetch(url, {
-        method: 'PATCH',
-        headers: {
-          apikey: SERVICE_ROLE,
-          Authorization: `Bearer ${SERVICE_ROLE}`,
-          'Content-Type': 'application/json',
-          Prefer: 'return=representation'
-        },
-        body: JSON.stringify({
-          immagine_url: PLACEHOLDER,
-          pub_end: true
-        })
-      });
+      const { data, error } = await supabase
+        .from(table)
+        .update({ immagine_url: PLACEHOLDER })
+        .eq('id', id)
+        .select();
 
-      const json = await resp.json();
-      if (!resp.ok) {
-        return res.status(500).json({ error: json });
+      if (error) {
+        return res.status(500).json({ error: error.message });
+      }
+      return res.status(200).json({ success: true, updated: data });
+    }
+
+    // ========================
+    // 3) LISTA TUTTI I FILE DEL BUCKET (anche non assegnati)
+    //    Nota: list() non è ricorsivo. Se usi sotto-cartelle,
+    //    vedi la utility listFolder() qui sotto.
+    // ========================
+    if (req.method === 'GET' && action === 'listBucket') {
+      const files = await listAllFilesRecursive('post-images', ''); // ricorsivo
+      return res.status(200).json(files);
+    }
+
+    // ========================
+    // 4) DELETE FILE dal bucket (dato l'URL pubblico)
+    // ========================
+    if (req.method === 'POST' && action === 'deleteFile') {
+      const { oldUrl } = req.body || {};
+      if (!oldUrl) {
+        return res.status(400).json({ error: 'Manca oldUrl' });
       }
 
-      return res.status(200).json({ success: true, updated: json });
-    } catch (err) {
-      console.error('[loadCleanImage reset] errore:', err);
-      return res.status(500).json({ error: 'Errore interno' });
-    }
-  }
-
-  // ========================
-  // 3) LISTA FILE BUCKET
-  // ========================
-if (req.method === 'GET' && action === 'listBucket') {
-  try {
-    const { data, error } = await supabaseAdmin
-      .storage
-      .from('post-images')
-      .list('', {
-        limit: 1000,
-        sortBy: { column: 'name', order: 'desc' }
-      });
-
-    if (error) throw error;
-
-    const mapped = data.map(file => ({
-      name: file.name,
-      url: supabaseAdmin.storage.from('post-images').getPublicUrl(file.name).data.publicUrl,
-      created_at: file.updated_at || null
-    }));
-
-    return res.status(200).json(mapped);
-  } catch (err) {
-    console.error('[listBucket] errore:', err);
-    return res.status(500).json({ error: err.message });
-  }
-}
-
-
-  // ========================
-  // 4) DELETE FILE BUCKET
-  // ========================
-  if (req.method === 'POST' && action === 'deleteFile') {
-    const { oldUrl } = req.body;
-    if (!oldUrl) {
-      return res.status(400).json({ error: 'Manca oldUrl' });
-    }
-
-    try {
       const parsed = parseStorageUrl(oldUrl, SUPABASE_URL);
       if (!parsed) {
-        return res.status(400).json({ error: 'URL non valido o non nel dominio Supabase' });
+        return res.status(400).json({ error: 'URL non valido o non appartiene a questo Supabase' });
       }
 
       const { bucket, path } = parsed;
-      const delResp = await fetch(`${SUPABASE_URL}/storage/v1/object/${bucket}/${path}`, {
-        method: 'DELETE',
-        headers: {
-          apikey: SERVICE_ROLE,
-          Authorization: `Bearer ${SERVICE_ROLE}`
-        }
-      });
-
-      if (!delResp.ok) {
-        const errTxt = await delResp.text();
-        return res.status(500).json({ error: errTxt });
+      const { error } = await supabase.storage.from(bucket).remove([path]);
+      if (error) {
+        return res.status(500).json({ error: error.message });
       }
-
       return res.status(200).json({ success: true });
-    } catch (err) {
-      console.error('[deleteFile] errore:', err);
-      return res.status(500).json({ error: 'Errore interno' });
     }
-  }
 
-  // ========================
-  // Metodo non consentito
-  // ========================
-  return res.status(405).json({ error: 'Metodo o action non valido' });
+    return res.status(405).json({ error: 'Metodo o action non valido' });
+  } catch (err) {
+    console.error('[loadCleanImage] errore:', err);
+    return res.status(500).json({ error: String(err.message || err) });
+  }
 }
 
-// Helper per estrarre bucket e path da URL Supabase Storage
+/**
+ * Estrae bucket e path da una URL pubblica/firmata di Supabase Storage.
+ */
 function parseStorageUrl(url, base) {
   try {
     const u = new URL(url);
     const b = new URL(base);
     if (u.origin !== b.origin) return null;
 
+    // /storage/v1/object/public/<bucket>/<path...>
+    // /storage/v1/object/sign/<bucket>/<path...>
+    // /storage/v1/object/<bucket>/<path...>
     const parts = u.pathname.split('/').filter(Boolean);
     const idx = parts.indexOf('object');
     if (idx === -1) return null;
 
     let bucketIndex = idx + 1;
     if (parts[bucketIndex] === 'public' || parts[bucketIndex] === 'sign') {
-      bucketIndex++;
+      bucketIndex += 1;
     }
-
     const bucket = parts[bucketIndex];
-    const path = parts.slice(bucketIndex + 1).join('/');
+    const path   = parts.slice(bucketIndex + 1).join('/');
+    if (!bucket || !path) return null;
     return { bucket, path };
   } catch {
     return null;
   }
+}
+
+/**
+ * Lista *ricorsivamente* tutti i file nel bucket, restituendo:
+ * [{ name, url, created_at }]
+ */
+async function listAllFilesRecursive(bucket, prefix = '') {
+  const out = [];
+
+  // lista elementi nel "prefix"
+  const { data, error } = await supabase.storage.from(bucket).list(prefix, {
+    limit: 1000,
+    sortBy: { column: 'name', order: 'desc' }
+  });
+  if (error) throw new Error(`list ${bucket}/${prefix}: ${error.message}`);
+
+  // separa cartelle e file
+  for (const entry of data || []) {
+    // Heuristics: se ha 'metadata' è un file, se è null è cartella
+    const isFile = !!entry?.metadata;
+    const fullPath = prefix ? `${prefix}/${entry.name}` : entry.name;
+
+    if (isFile) {
+      const { data: pub } = supabase.storage.from(bucket).getPublicUrl(fullPath);
+      out.push({
+        name: fullPath,
+        url: pub.publicUrl,
+        created_at: entry.updated_at || entry.created_at || null
+      });
+    } else {
+      // cartella: scendi ricorsivamente
+      const nested = await listAllFilesRecursive(bucket, fullPath);
+      out.push(...nested);
+    }
+  }
+
+  return out;
 }

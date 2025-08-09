@@ -61,6 +61,45 @@ export default async function handler(req, res) {
       return res.status(500).json({ error: err.message });
     }
   }
+  // ========================
+  // 2) DELETE THE FILE
+  // ========================
+    if (req.method === 'POST' && action === 'deleteFile') {
+  const { oldUrl } = req.body;
+  if (!oldUrl) {
+    return res.status(400).json({ error: 'Manca oldUrl' });
+  }
+
+  try {
+    const parsed = parseStorageUrl(oldUrl, SUPABASE_URL);
+    if (!parsed) {
+      return res.status(400).json({ error: 'URL non valido o non nel dominio Supabase' });
+    }
+
+    const { bucket, path } = parsed;
+    const delResp = await fetch(
+      `${SUPABASE_URL}/storage/v1/object/${bucket}/${path}`,
+      {
+        method: 'DELETE',
+        headers: {
+          apikey: SERVICE_ROLE,
+          Authorization: `Bearer ${SERVICE_ROLE}`
+        }
+      }
+    );
+
+    if (!delResp.ok) {
+      const errTxt = await delResp.text();
+      return res.status(500).json({ error: errTxt });
+    }
+
+    return res.status(200).json({ success: true });
+  } catch (err) {
+    console.error('[deleteFile] errore:', err);
+    return res.status(500).json({ error: 'Errore interno' });
+  }
+}
+
 
   // ========================
   // 2) RESET IMAGE

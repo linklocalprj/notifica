@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="it">
 <head>
-  <meta charset="UTF-8">
+  <meta charset="UTF-8" />
   <title>Cleanup Media</title>
   <style>
     table { border-collapse: collapse; width: 100%; margin-bottom: 30px; }
@@ -9,40 +9,75 @@
     th { background: #eee; }
     button { padding: 4px 8px; margin: 0 2px; }
     .muted { color:#666; font-size:12px; }
+    .controls { display:flex; gap:12px; align-items:center; flex-wrap:wrap; margin: 10px 0 16px; }
+    .chip { display:inline-block; padding:2px 6px; border-radius: 6px; font-size: 12px; }
+    .chip.ok { background:#e8fff0; color:#0b7a34; border:1px solid #bfe7cb; }
+    .chip.ko { background:#fff4f4; color:#b00020; border:1px solid #f1c3c6; }
   </style>
 </head>
 <body>
   <h1>Post inviati – pulizia media</h1>
   <p class="muted">
-    Qui vedi i post con <code>stato_invio = sent</code>.  
-    - <b>Elimina media</b>: rimuove il file dal bucket.  
-    - <b>Elimina riga</b>: sostituisce con placeholder e marca come completato.
+    - <b>Elimina media</b>: rimuove il file dal bucket (non tocca la riga).<br/>
+    - <b>Elimina riga</b>: mette il placeholder e fa sparire la riga dalla lista (non elimina il file).
   </p>
+
+  <!-- 🔎 Filtri POST -->
+  <div class="controls">
+    <label>
+      Mostra:
+      <select id="post-inbucket-filter">
+        <option value="all">Tutti</option>
+        <option value="match">Solo con link presente nel bucket</option>
+        <option value="miss">Solo con link NON presente nel bucket</option>
+      </select>
+    </label>
+    <label>
+      Cerca nel link:
+      <input id="post-link-search" type="text" placeholder="parte di URL immagine…" />
+    </label>
+    <button id="post-apply-filters">Applica filtri</button>
+  </div>
 
   <table id="posts-table">
     <thead>
-      <tr>
-        <th>ID</th>
-        <th>Piattaforma</th>
-        <th>Cliente</th>
-        <th>Data Pubblicazione</th>
-        <th>Media (preview)</th>
-        <th>Azioni</th>
-      </tr>
+    <tr>
+      <th>ID</th>
+      <th>Piattaforma</th>
+      <th>Cliente</th>
+      <th>Data Pubblicazione</th>
+      <th>Media (preview)</th>
+      <th>Match bucket</th>
+      <th>Azioni</th>
+    </tr>
     </thead>
     <tbody></tbody>
   </table>
 
   <h2>📂 Tutti i file nel bucket</h2>
-  <p class="muted">Elenco di tutti i file presenti nel bucket <code>post-images</code> con data di caricamento. Puoi eliminarli anche se non sono associati a un post.</p>
+  <p class="muted">Elenco di tutti i file presenti nel bucket <code>post-images</code> (anche in sottocartelle).</p>
+
+  <!-- 🔎 Filtri BUCKET -->
+  <div class="controls">
+    <label>Da: <input id="date-from" type="date"></label>
+    <label>A: <input id="date-to" type="date"></label>
+    <label>
+      Cerca nome:
+      <input id="bucket-name-search" type="text" placeholder="parte di nome file…" />
+    </label>
+    <button id="bucket-apply-filters">Applica filtri</button>
+    <button id="bucket-delete-filtered">Elimina TUTTI i file filtrati</button>
+    <span id="bucket-filter-count" class="muted"></span>
+  </div>
+
   <table id="bucket-table">
     <thead>
-      <tr>
-        <th>Nome file</th>
-        <th>Data upload</th>
-        <th>Preview</th>
-        <th>Azioni</th>
-      </tr>
+    <tr>
+      <th>Nome file</th>
+      <th>Data upload</th>
+      <th>Preview</th>
+      <th>Azioni</th>
+    </tr>
     </thead>
     <tbody></tbody>
   </table>
@@ -55,26 +90,78 @@
     pubblicazioni_google:    'Google'
   };
 
-  const PLACEHOLDER = 'https://jljljrkubullcrspicvj.supabase.co/storage/v1/object/public/post-images/placeholders/placeholder.jpg';
+  const PLACEHOLDER = `${location.origin}/api/..PLACEHOLDER_OVERRIDDEN_BY_BACKEND..`; // non usato nei filtri
+  const API_BASE = '/api/loadCleanImage';
 
-  // ====================
-  // SEZIONE 1: POST
-  // ====================
-  async function loadAllForCleanup() {
+  // Stato in memoria
+  let POSTS = [];
+  let BUCKET = [];
+  let BUCKET_URL_SET = new Set(); // normalized public URLs per match veloce
+
+  // ============ Utility ============
+  function normalizeStorageUrl(url) {
+    if (!url || typeof url !== 'string') return '';
     try {
-      const res = await fetch('/api/loadCleanImage?action=load');
-      if (!res.ok) throw new Error(await res.text());
-      const raw = await res.json();
-      if (!Array.isArray(raw)) throw new Error('Formato dati non valido');
-
-      const rows = raw.map(r => ({
-        ...r,
-        piattaforma: tableLabels[r.table] ?? r.table
-      }));
-      renderPostsTable(rows);
-    } catch (e) {
-      alert('Errore caricamento: ' + e.message);
+      const u = new URL(url);
+      // rimuovo query (firma, ecc.)
+      u.search = '';
+      // se contiene /object/sign/ => trasformo in /object/public/ per confrontare
+      const parts = u.pathname.split('/').filter(Boolean);
+      const idx = parts.indexOf('object');
+      if (idx !== -1 && parts[idx+1] === 'sign') {
+        parts[idx+1] = 'public';
+        u.pathname = '/' + parts.join('/');
+      }
+      return u.toString();
+    } catch {
+      return url;
     }
+  }
+
+  function parseISOToDate(iso) {
+    if (!iso) return null;
+    const d = new Date(iso);
+    return isNaN(d.getTime()) ? null : d;
+  }
+
+  function inDateRange(d, from, to) {
+    if (!d) return false;
+    if (from && d < from) return false;
+    if (to && d > to) return false;
+    return true;
+  }
+
+  // ============ POST: load + render + filtri ============
+  async function loadAllForCleanup() {
+    const res = await fetch(`${API_BASE}?action=load`);
+    if (!res.ok) throw new Error(await res.text());
+    const raw = await res.json();
+    POSTS = (raw || []).map(r => ({
+      ...r,
+      piattaforma: tableLabels[r.table] ?? r.table
+    }));
+    renderPostsWithFilters();
+  }
+
+  function renderPostsWithFilters() {
+    // filtri
+    const mode = document.getElementById('post-inbucket-filter').value;
+    const q = (document.getElementById('post-link-search').value || '').toLowerCase().trim();
+
+    // calcolo match per ogni post
+    const rows = POSTS.map(p => {
+      const mediaUrl = p.immagine_url || p.video_url || p.media || '';
+      const normalized = normalizeStorageUrl(mediaUrl);
+      const match = BUCKET_URL_SET.has(normalized);
+      return { ...p, _mediaUrl: mediaUrl, _normalizedUrl: normalized, _match: match };
+    }).filter(p => {
+      if (q && !String(p._mediaUrl || '').toLowerCase().includes(q)) return false;
+      if (mode === 'match' && !p._match) return false;
+      if (mode === 'miss' && p._match) return false;
+      return true;
+    });
+
+    renderPostsTable(rows);
   }
 
   function renderPostsTable(rows) {
@@ -84,7 +171,10 @@
     rows.forEach(r => {
       const cliente   = r.nome_azienda ?? r.azienda ?? '-';
       const dataPub   = r.data_pubblicazione || '-';
-      const mediaUrl  = r.immagine_url || r.video_url || r.media || '-';
+      const mediaUrl  = r._mediaUrl || '-';
+      const matchChip = r._match
+        ? '<span class="chip ok">presente</span>'
+        : '<span class="chip ko">assente</span>';
 
       const tr = document.createElement('tr');
       tr.innerHTML = `
@@ -93,6 +183,7 @@
         <td>${cliente}</td>
         <td>${dataPub}</td>
         <td>${typeof mediaUrl === 'string' && mediaUrl !== '-' ? `<a href="${mediaUrl}" target="_blank">apri</a>` : '-'}</td>
+        <td>${matchChip}</td>
         <td>
           <button id="btn-del-media-${r.table}-${r.id}">🗑 Elimina media</button>
           <button id="btn-del-riga-${r.table}-${r.id}">🚫 Elimina riga</button>
@@ -111,70 +202,93 @@
   }
 
   async function eliminaSoloMedia(row) {
-    if (!row.immagine_url) {
+    const url = row.immagine_url;
+    if (!url) {
       alert('Nessun media da eliminare');
       return;
     }
     const btn = document.getElementById(`btn-del-media-${row.table}-${row.id}`);
-    btn.disabled = true;
-    const prevTxt = btn.textContent;
-    btn.textContent = '…';
+    const prev = btn.textContent; btn.disabled = true; btn.textContent = '…';
     try {
-      const resp = await fetch('/api/loadCleanImage', {
+      const resp = await fetch(API_BASE, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          action: 'deleteFile',
-          oldUrl: row.immagine_url
-        })
+        headers: { 'Content-Type':'application/json' },
+        body: JSON.stringify({ action:'deleteFile', oldUrl:url })
       });
       if (!resp.ok) throw new Error(await resp.text());
+      // aggiorno il SET così il match diventa "assente"
+      BUCKET_URL_SET.delete(normalizeStorageUrl(url));
+      renderPostsWithFilters();
       alert('✅ Media eliminato dal bucket');
-    } catch (err) {
-      alert('Errore eliminazione media: ' + err.message);
+    } catch (e) {
+      alert('Errore eliminazione media: ' + e.message);
     } finally {
-      btn.disabled = false;
-      btn.textContent = prevTxt;
+      btn.disabled = false; btn.textContent = prev;
     }
   }
 
   async function eliminaRiga(row) {
     const btn = document.getElementById(`btn-del-riga-${row.table}-${row.id}`);
-    btn.disabled = true;
-    const prevTxt = btn.textContent;
-    btn.textContent = '…';
+    const prev = btn.textContent; btn.disabled = true; btn.textContent = '…';
     try {
-      const resp = await fetch('/api/loadCleanImage', {
+      const resp = await fetch(API_BASE, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type':'application/json' },
         body: JSON.stringify({
-          action: 'reset',
+          action:'reset',
           table: row.table,
-          id: row.id,
-          placeholder: PLACEHOLDER
+          id: row.id
         })
       });
       if (!resp.ok) throw new Error(await resp.text());
+      // ricarico i post (quella riga sparirà)
       await loadAllForCleanup();
-    } catch (err) {
-      alert('Errore eliminazione riga: ' + err.message);
-      btn.disabled = false;
-      btn.textContent = prevTxt;
+    } catch (e) {
+      alert('Errore eliminazione riga: ' + e.message);
+      btn.disabled = false; btn.textContent = prev;
     }
   }
 
-  // ====================
-  // SEZIONE 2: BUCKET
-  // ====================
+  // ============ BUCKET: load + render + filtri + bulk delete ============
   async function loadAllBucketFiles() {
-    try {
-      const res = await fetch('/api/loadCleanImage?action=listBucket');
-      if (!res.ok) throw new Error(await res.text());
-      const files = await res.json();
-      renderBucketTable(files);
-    } catch (e) {
-      alert('Errore caricamento bucket: ' + e.message);
-    }
+    const res = await fetch(`${API_BASE}?action=listBucket`);
+    if (!res.ok) throw new Error(await res.text());
+    const files = await res.json();
+    // normalizzo url per il match
+    BUCKET = (files || []).map(f => ({
+      ...f,
+      _urlNorm: normalizeStorageUrl(f.url),
+      _dateObj: parseISOToDate(f.created_at)
+    }));
+    BUCKET_URL_SET = new Set(BUCKET.map(f => f._urlNorm));
+    renderBucketWithFilters();
+    // ricalcolo match sui post ogni volta che ricarico il bucket
+    renderPostsWithFilters();
+  }
+
+  function getBucketFilters() {
+    const fromStr = document.getElementById('date-from').value || '';
+    const toStr   = document.getElementById('date-to').value || '';
+    const nameQ   = (document.getElementById('bucket-name-search').value || '').toLowerCase().trim();
+
+    const from = fromStr ? new Date(fromStr + 'T00:00:00') : null;
+    const to   = toStr   ? new Date(toStr   + 'T23:59:59') : null;
+
+    return { from, to, nameQ };
+  }
+
+  function renderBucketWithFilters() {
+    const { from, to, nameQ } = getBucketFilters();
+    const filtered = BUCKET.filter(f => {
+      if (nameQ && !f.name.toLowerCase().includes(nameQ)) return false;
+      if (from || to) {
+        if (!inDateRange(f._dateObj, from, to)) return false;
+      }
+      return true;
+    });
+    renderBucketTable(filtered);
+    document.getElementById('bucket-filter-count').textContent =
+      `File filtrati: ${filtered.length}`;
   }
 
   function renderBucketTable(files) {
@@ -182,8 +296,8 @@
     tbody.innerHTML = '';
 
     files.forEach(f => {
-      const tr = document.createElement('tr');
       const dateStr = f.created_at ? new Date(f.created_at).toLocaleString() : '-';
+      const tr = document.createElement('tr');
       tr.innerHTML = `
         <td>${f.name}</td>
         <td>${dateStr}</td>
@@ -200,28 +314,66 @@
 
   async function eliminaFileBucket(fileUrl) {
     if (!confirm('Eliminare definitivamente questo file?')) return;
-    try {
-      const resp = await fetch('/api/loadCleanImage', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          action: 'deleteFile',
-          oldUrl: fileUrl
-        })
-      });
-      if (!resp.ok) throw new Error(await resp.text());
-      await loadAllBucketFiles();
-    } catch (err) {
-      alert('Errore eliminazione file: ' + err.message);
+    const resp = await fetch(API_BASE, {
+      method: 'POST',
+      headers: { 'Content-Type':'application/json' },
+      body: JSON.stringify({ action:'deleteFile', oldUrl:fileUrl })
+    });
+    if (!resp.ok) {
+      alert('Errore eliminazione file: ' + (await resp.text()));
+      return;
     }
+    // ricarico elenco bucket e set
+    await loadAllBucketFiles();
   }
 
-  // ====================
-  // INIT
-  // ====================
-  document.addEventListener('DOMContentLoaded', () => {
-    loadAllForCleanup();
-    loadAllBucketFiles();
+  // Eliminazione MASSIVA dei file filtrati (range data + nome)
+  async function eliminaBucketFiltrati() {
+    const { from, to, nameQ } = getBucketFilters();
+    const toDelete = BUCKET.filter(f => {
+      if (nameQ && !f.name.toLowerCase().includes(nameQ)) return false;
+      if (from || to) {
+        if (!inDateRange(f._dateObj, from, to)) return false;
+      }
+      return true;
+    });
+
+    if (!toDelete.length) {
+      alert('Nessun file corrisponde ai filtri.');
+      return;
+    }
+
+    if (!confirm(`Eliminare definitivamente ${toDelete.length} file?`)) return;
+
+    // elimino in serie per semplicità (puoi parallelizzare se vuoi)
+    let ok = 0, ko = 0;
+    for (const f of toDelete) {
+      try {
+        const r = await fetch(API_BASE, {
+          method: 'POST',
+          headers: { 'Content-Type':'application/json' },
+          body: JSON.stringify({ action:'deleteFile', oldUrl:f.url })
+        });
+        if (r.ok) ok++; else ko++;
+      } catch { ko++; }
+    }
+    alert(`Eliminazione terminata. OK: ${ok}, Errori: ${ko}`);
+    await loadAllBucketFiles();
+  }
+
+  // ============ INIT + listeners ============
+  document.getElementById('post-apply-filters').addEventListener('click', renderPostsWithFilters);
+  document.getElementById('bucket-apply-filters').addEventListener('click', renderBucketWithFilters);
+  document.getElementById('bucket-delete-filtered').addEventListener('click', eliminaBucketFiltrati);
+
+  document.addEventListener('DOMContentLoaded', async () => {
+    try {
+      // carico prima il bucket, così ho il SET per il match
+      await loadAllBucketFiles();
+      await loadAllForCleanup();
+    } catch (e) {
+      alert('Errore iniziale: ' + e.message);
+    }
   });
 </script>
 

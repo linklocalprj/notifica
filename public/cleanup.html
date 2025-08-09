@@ -13,7 +13,7 @@
 </head>
 <body>
   <h1>Post inviati – pulizia media</h1>
-  <p class="muted">Qui vedi i post con <code>stato_invio = sent</code>. Clicca “Elimina media” quando vuoi liberare spazio (verrà messo il placeholder).</p>
+  <p class="muted">Qui vedi i post con <code>stato_invio = sent</code>. Clicca “Elimina media” per sostituire <code>immagine_url</code> con il placeholder.</p>
 
   <table id="posts-table">
     <thead>
@@ -22,7 +22,7 @@
         <th>Piattaforma</th>
         <th>Cliente</th>
         <th>Data Pubblicazione</th>
-        <th>Media</th>
+        <th>Media (preview)</th>
         <th>Azioni</th>
       </tr>
     </thead>
@@ -30,15 +30,14 @@
   </table>
 
 <script type="module">
-  // 🔧 CONFIG
-  const MAKE_WEBHOOK_URL = "https://hook.integromat.com/REPLACE_WITH_YOURS"; // <-- metti il tuo
-
   const tableLabels = {
     pubblicazioni_facebook:  'Facebook',
     pubblicazioni_instagram: 'Instagram',
     pubblicazioni_linkedin:  'LinkedIn',
     pubblicazioni_google:    'Google'
   };
+
+  const PLACEHOLDER = 'https://via.placeholder.com/1200x1200?text=MEDIA';
 
   async function loadAllForCleanup() {
     try {
@@ -63,8 +62,8 @@
 
     rows.forEach(r => {
       const cliente   = r.nome_azienda ?? r.azienda ?? '-';
-      const mediaUrl  = r.video_url || r.immagine_url || r.media || '-';
       const dataPub   = r.data_pubblicazione || '-';
+      const mediaUrl  = r.immagine_url || r.video_url || r.media || '-';
 
       const tr = document.createElement('tr');
       tr.innerHTML = `
@@ -72,7 +71,7 @@
         <td>${r.piattaforma}</td>
         <td>${cliente}</td>
         <td>${dataPub}</td>
-        <td>${mediaUrl ? `<a href="${mediaUrl}" target="_blank">apri</a>` : '-'}</td>
+        <td>${typeof mediaUrl === 'string' && mediaUrl !== '-' ? `<a href="${mediaUrl}" target="_blank">apri</a>` : '-'}</td>
         <td><button id="btn-del-${r.table}-${r.id}">Elimina media</button></td>
       `;
       tbody.appendChild(tr);
@@ -82,25 +81,6 @@
     });
   }
 
-  function extractStorageInfoFromUrl(mediaUrl) {
-    // Supporta: /storage/v1/object/public/<bucket>/<path>
-    //           /storage/v1/object/sign/<bucket>/<path>?token=...
-    try {
-      const u = new URL(mediaUrl);
-      const parts = u.pathname.split('/').filter(Boolean); // ["storage","v1","object","public","bucket","..."] oppure "sign"
-      const objIdx = parts.indexOf('object');
-      if (objIdx === -1) return null;
-
-      const visibility = parts[objIdx + 1];          // "public" | "sign"
-      const bucket     = parts[objIdx + 2];          // sempre bucket
-      const objectPath = parts.slice(objIdx + 3).join('/'); // resto del path
-      if (!bucket || !objectPath) return null;
-      return { bucket, objectPath };
-    } catch {
-      return null;
-    }
-  }
-
   async function eliminaMedia(row) {
     const btnId = `btn-del-${row.table}-${row.id}`;
     const btn = document.getElementById(btnId);
@@ -108,45 +88,20 @@
     const prevTxt = btn.textContent;
     btn.textContent = '…';
 
-    // scegliamo la colonna media in base a cosa c'è
-    const mediaColumn = row.video_url ? 'video_url'
-                      : row.immagine_url ? 'immagine_url'
-                      : row.media ? 'media'
-                      : null;
-
-    const mediaUrl = row[mediaColumn];
-    if (!mediaColumn || !mediaUrl) {
-      alert('❌ Nessun media da eliminare');
-      btn.disabled = false; btn.textContent = prevTxt; return;
-    }
-
-    const info = extractStorageInfoFromUrl(mediaUrl);
-    if (!info) {
-      alert('❌ URL media non riconosciuto come file Supabase Storage');
-      btn.disabled = false; btn.textContent = prevTxt; return;
-    }
-
-    const payload = {
-      table: row.table,
-      id: row.id,
-      media_column: mediaColumn,
-      bucket: info.bucket,
-      object_path: info.objectPath,
-      placeholder_url: "https://cdn.tuodominio.com/placeholder-media.png"
-    };
-
-    if (!MAKE_WEBHOOK_URL || MAKE_WEBHOOK_URL.includes('REPLACE_WITH_YOURS')) {
-      alert('Configura MAKE_WEBHOOK_URL.');
-      btn.disabled = false; btn.textContent = prevTxt; return;
-    }
-
     try {
-      const resp = await fetch(MAKE_WEBHOOK_URL, {
+      const resp = await fetch('/api/resetImage', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
+        body: JSON.stringify({
+          table: row.table,
+          id: row.id,
+          placeholder: PLACEHOLDER
+        })
       });
       if (!resp.ok) throw new Error(await resp.text());
+
+      // Aggiorna la UI locale
+      row.immagine_url = PLACEHOLDER;
       btn.textContent = '✅';
     } catch (err) {
       alert('Errore: ' + err.message);

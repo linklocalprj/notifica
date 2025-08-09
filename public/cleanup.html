@@ -39,10 +39,9 @@
 
   const PLACEHOLDER = 'https://jljljrkubullcrspicvj.supabase.co/storage/v1/object/public/post-images/placeholders/placeholder.jpg';
 
-
   async function loadAllForCleanup() {
     try {
-      // ✅ usa l’endpoint unico con action=load
+      // ✅ usa l’endpoint unico: GET + action=load
       const res = await fetch('/api/loadCleanImage?action=load');
       if (!res.ok) throw new Error(await res.text());
       const raw = await res.json();
@@ -84,40 +83,38 @@
     });
   }
 
-async function eliminaMedia(row) {
-  const btnId = `btn-del-${row.table}-${row.id}`;
-  const btn = document.getElementById(btnId);
-  btn.disabled = true;
-  const prevTxt = btn.textContent;
-  btn.textContent = '…';
+  async function eliminaMedia(row) {
+    const btnId = `btn-del-${row.table}-${row.id}`;
+    const btn = document.getElementById(btnId);
+    btn.disabled = true;
+    const prevTxt = btn.textContent;
+    btn.textContent = '…';
 
-  try {
-    const resp = await fetch('/api/loadCleanImage', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        table: row.table,
-        id: row.id,
-        placeholder: PLACEHOLDER
-      })
-    });
-    if (!resp.ok) throw new Error(await resp.text());
+    try {
+      // ✅ endpoint unico: POST + action=reset
+      const resp = await fetch('/api/loadCleanImage', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'reset',
+          table: row.table,
+          id: row.id,
+          placeholder: PLACEHOLDER
+        })
+      });
+      if (!resp.ok) throw new Error(await resp.text());
 
-    await loadAllForCleanup();
-
-    // Rimuovi la riga dalla tabella
-    const tr = btn.closest('tr');
-    if (tr) tr.remove();
-
-  } catch (err) {
-    alert('Errore: ' + err.message);
-    btn.disabled = false;
-    btn.textContent = prevTxt;
+      // 🔄 ricarica la lista (filtra via pub_end=false lato backend)
+      await loadAllForCleanup();
+    } catch (err) {
+      alert('Errore: ' + err.message);
+      btn.disabled = false;
+      btn.textContent = prevTxt;
+    }
   }
-}
-
 
   document.addEventListener('DOMContentLoaded', loadAllForCleanup);
 </script>
+
 </body>
 </html>

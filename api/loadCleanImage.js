@@ -20,6 +20,7 @@ export default async function handler(req, res) {
       const allPubs = await Promise.all(tables.map(async table => {
         const url = new URL(`${SUPABASE_URL}/rest/v1/${table}`);
         url.searchParams.set('stato_invio', 'eq.sent');
+        url.searchParams.set('pub_end', 'is.false');
         const resp = await fetch(url, {
           headers: {
             apikey: SERVICE_ROLE,
@@ -85,7 +86,11 @@ if (req.method === 'POST' && action === 'reset') {
         // ritorna la riga aggiornata per debug
         Prefer: 'return=representation'
       },
-      body: JSON.stringify({ immagine_url: PLACEHOLDER })
+      body: JSON.stringify({
+        immagine_url: PLACEHOLDER,
+        pub_end: true
+        })
+
     });
 
     const json = await resp.json();

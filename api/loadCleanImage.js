@@ -70,8 +70,9 @@ export default async function handler(req, res) {
       return res.status(400).json({ error: 'Mancano table o id' });
     }
 
-    const PLACEHOLDER =
-      placeholder || 'https://via.placeholder.com/1200x1200?text=MEDIA';
+const PLACEHOLDER =
+  placeholder || 'https://jljljrkubullcrspicvj.supabase.co/storage/v1/object/public/post-images/placeholders/placeholder.jpg';
+
 
     try {
       const url = `${SUPABASE_URL}/rest/v1/${table}?id=eq.${id}`;

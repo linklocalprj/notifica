@@ -84,36 +84,36 @@
     });
   }
 
-  async function eliminaMedia(row) {
-    const btnId = `btn-del-${row.table}-${row.id}`;
-    const btn = document.getElementById(btnId);
-    btn.disabled = true;
-    const prevTxt = btn.textContent;
-    btn.textContent = '…';
+async function eliminaMedia(row) {
+  const btnId = `btn-del-${row.table}-${row.id}`;
+  const btn = document.getElementById(btnId);
+  btn.disabled = true;
+  const prevTxt = btn.textContent;
+  btn.textContent = '…';
 
-    try {
-      // ✅ POST all’endpoint unico con action=reset
-      const resp = await fetch('/api/loadCleanImage', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          action: 'reset',
-          table: row.table,
-          id: row.id,
-          placeholder: PLACEHOLDER
-        })
-      });
-      if (!resp.ok) throw new Error(await resp.text());
+  try {
+    const resp = await fetch('/api/resetImage', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        table: row.table,
+        id: row.id,
+        placeholder: PLACEHOLDER
+      })
+    });
+    if (!resp.ok) throw new Error(await resp.text());
 
-      // Aggiorna la UI locale
-      row.immagine_url = PLACEHOLDER;
-      btn.textContent = '✅';
-    } catch (err) {
-      alert('Errore: ' + err.message);
-      btn.disabled = false;
-      btn.textContent = prevTxt;
-    }
+    // Rimuovi la riga dalla tabella
+    const tr = btn.closest('tr');
+    if (tr) tr.remove();
+
+  } catch (err) {
+    alert('Errore: ' + err.message);
+    btn.disabled = false;
+    btn.textContent = prevTxt;
   }
+}
+
 
   document.addEventListener('DOMContentLoaded', loadAllForCleanup);
 </script>

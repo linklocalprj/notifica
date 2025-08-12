@@ -4,107 +4,99 @@
   <meta charset="UTF-8" />
   <title>Gestione Attivazioni</title>
   <style>
-    body {
-      font-family: sans-serif;
-      background-color: #f9f9f9;
-      padding: 2rem;
-    }
-    h1 {
-      margin-bottom: 20px;
-    }
-    table {
-      width: 100%;
-      border-collapse: collapse;
-      background: white;
-      box-shadow: 0 0 10px rgba(0, 0, 0, 0.05);
-    }
-    th, td {
-      padding: 10px;
-      text-align: left;
-      border-bottom: 1px solid #eee;
-    }
-    th {
-      background: #f0f0f0;
-    }
-    button {
-      padding: 6px 10px;
-      background: #10b981;
-      border: none;
-      color: white;
-      border-radius: 4px;
-      cursor: pointer;
-    }
-    button:disabled {
-      background: #ccc;
-      cursor: not-allowed;
-    }
+    body { font-family: sans-serif; background-color: #f9f9f9; padding: 2rem; }
+    h1 { margin-bottom: 20px; }
+    table { width: 100%; border-collapse: collapse; background: white; box-shadow: 0 0 10px rgba(0,0,0,.05); }
+    th, td { padding: 10px; text-align: left; border-bottom: 1px solid #eee; vertical-align: middle; }
+    th { background: #f0f0f0; }
+    button { padding: 6px 10px; background: #10b981; border: none; color: white; border-radius: 4px; cursor: pointer; }
+    button.secondary { background:#3b82f6; }
+    button:disabled { background: #ccc; cursor: not-allowed; }
+    .muted { color:#666; font-size:12px; }
+    .nowrap { white-space: nowrap; }
   </style>
 </head>
 <body>
-  <div style="margin: 2rem 0; text-align: center;">
-  <a href="/index.html" style="
-    display: inline-block;
-    padding: 10px 20px;
-    background-color: #2e3b55;
-    color: white;
-    border-radius: 8px;
-    text-decoration: none;
-    font-weight: bold;
-    font-size: 1rem;
-  ">
-    🏠 Torna alla Home
-  </a>
-</div>
-
   <h1>📋 Attivazioni Postami</h1>
   <table>
     <thead>
       <tr>
         <th>Email</th>
         <th>Data registrazione</th>
-        <th>Stato</th>
+        <th>Stato account</th>
+        <th class="nowrap">Vetrina</th>
         <th>Azioni</th>
       </tr>
     </thead>
-    <tbody id="listaAttivazioni">
-      <!-- Popolamento dinamico -->
-    </tbody>
+    <tbody id="listaAttivazioni"></tbody>
   </table>
 
   <script>
+    async function fetchJson(url, opts) {
+      const res = await fetch(url, opts);
+      if (!res.ok) throw new Error(`HTTP ${res.status}: ${await res.text()}`);
+      return res.json();
+    }
+
+    async function getVetrinaStatus(email) {
+      // nuovo endpoint: ritorna { ok, vetrina_attiva, slug, link? }
+      try {
+        const data = await fetchJson('/api/vetrinaStatus?email=' + encodeURIComponent(email));
+        return { attiva: !!data.vetrina_attiva, slug: data.slug || null, link: data.link || null };
+      } catch (_) {
+        return { attiva: false, slug: null, link: null };
+      }
+    }
+
     async function caricaAttivazioni() {
       try {
-        const res = await fetch('/api/loadAttivazioni');
+        const data = await fetchJson('/api/loadAttivazioni'); // <-- lasciamo intatto il tuo backend attuale
+        if (!data.success) throw new Error(data.error || "Errore sconosciuto");
 
-        if (!res.ok) {
-          const text = await res.text();
-          throw new Error(`HTTP ${res.status}: ${text}`);
-        }
-
-        const data = await res.json();
-
-        if (!data.success) {
-          throw new Error(data.error || "Errore sconosciuto");
-        }
+        // arricchisco ogni riga con lo stato vetrina facendo richieste parallele
+        const arr = await Promise.all(
+          (data.attivazioni || []).map(async (item) => {
+            const v = await getVetrinaStatus(item.email);
+            return { ...item, vetrina_attiva: v.attiva, vetrina_slug: v.slug, vetrina_link: v.link };
+          })
+        );
 
         const tbody = document.getElementById('listaAttivazioni');
         tbody.innerHTML = '';
 
-        data.attivazioni.forEach(item => {
+        arr.forEach(item => {
           const tr = document.createElement('tr');
+          const stato = item.attivazione_confermata ? "✅ Attivo" : "⏳ In attesa";
+          const vetrinaBadge = item.vetrina_attiva
+            ? `✅ Attiva<br><span class="muted">${item.vetrina_slug || '-'}</span>`
+            : `⛔ Non attiva`;
 
-        tr.innerHTML = `
-          <td>${item.email}</td>
-          <td>${item.created_at ? new Date(item.created_at).toLocaleDateString() : '-'}</td>
-          <td>${item.attivazione_confermata ? "✅ Attivo" : "⏳ In attesa"}</td>
-          <td>
-            <button onclick="attivaEmail('${item.email}')" ${item.attivazione_confermata ? "disabled" : ""}>
-              Attiva
-            </button>
-          </td>
-        `;
+          const btnAccount = `
+            <button onclick="attivaEmail('${item.email.replace(/'/g,"\\'")}')"
+              ${item.attivazione_confermata ? "disabled" : ""}>
+              Attiva Account
+            </button>`;
 
+          const btnVetrina = item.vetrina_attiva
+            ? `<a class="secondary button-like" href="${item.vetrina_link}" target="_blank" rel="noopener">
+                 Apri Vetrina
+               </a>`
+            : `<button class="secondary" onclick="attivaVetrina('${item.email.replace(/'/g,"\\'")}')"
+                 ${item.attivazione_confermata ? "" : "disabled"}
+               >
+                 Attiva Vetrina
+               </button>`;
 
+          tr.innerHTML = `
+            <td>${item.email}</td>
+            <td>${item.created_at ? new Date(item.created_at).toLocaleDateString() : '-'}</td>
+            <td>${stato}</td>
+            <td class="nowrap">${vetrinaBadge}</td>
+            <td class="nowrap" style="display:flex; gap:8px; align-items:center;">
+              ${btnAccount}
+              ${btnVetrina}
+            </td>
+          `;
           tbody.appendChild(tr);
         });
 
@@ -117,30 +109,44 @@
     async function attivaEmail(email) {
       const conferma = confirm(`Vuoi attivare l'accesso per ${email}?`);
       if (!conferma) return;
-
       try {
-        const res = await fetch('/api/attivaAccount', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+        const data = await fetchJson('/api/attivaAccount', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ email })
         });
-
-        if (!res.ok) {
-          const text = await res.text();
-          throw new Error(`HTTP ${res.status}: ${text}`);
-        }
-
-        const data = await res.json();
         if (data.success) {
           alert("✅ Account attivato con successo");
           caricaAttivazioni();
         } else {
           throw new Error(data.error || "Errore sconosciuto");
         }
-
       } catch (err) {
         alert("❌ Errore durante l'attivazione: " + err.message);
         console.error("❌ Errore POST /api/attivaAccount:", err);
+      }
+    }
+
+    async function attivaVetrina(email) {
+      // chiedo slug e (opzionale) nome attività
+      const slug = prompt(`Slug pubblico per ${email} (es. "pasticceria-rossi"):`);
+      if (!slug) return;
+      const nome_attivita = prompt('Nome attività da mostrare in vetrina (opzionale):') || '';
+
+      try {
+        const data = await fetchJson('/api/attivaVetrina', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email, slug, nome_attivita })
+        });
+        if (data.ok) {
+          alert(`✅ Vetrina attivata.\nLink: ${data.link}`);
+          caricaAttivazioni();
+        } else {
+          throw new Error(data.error || "Errore sconosciuto");
+        }
+      } catch (err) {
+        alert("❌ Errore attivazione vetrina: " + err.message);
+        console.error("❌ POST /api/attivaVetrina:", err);
       }
     }
 
